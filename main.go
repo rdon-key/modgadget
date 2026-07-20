@@ -1,9 +1,9 @@
 package main
 
 import (
+	"github.com/rdon-key/modgadget/internal/display"
+	"github.com/rdon-key/modgadget/internal/st7789"
 	"machine"
-	"modgadget-test/internal/display"
-	"modgadget-test/internal/st7789"
 	"time"
 )
 
