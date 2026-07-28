@@ -2,7 +2,9 @@ package main
 
 import (
 	"github.com/rdon-key/modgadget/internal/display"
+	"github.com/rdon-key/modgadget/internal/fontdata/spleen8x16"
 	"github.com/rdon-key/modgadget/internal/st7789"
+	textdraw "github.com/rdon-key/modgadget/internal/text"
 	"machine"
 	"time"
 )
@@ -59,18 +61,44 @@ func main() {
 	println("after display configure")
 	var backend display.Backend = panel
 
-	println("before draw")
-	if err := drawTestPattern(backend); err != nil {
-		println("draw failed:", err.Error())
+	println("before text draw")
+	if err := drawTextDemo(backend); err != nil {
+		println("text draw failed:", err.Error())
 		return
 	}
-	println("after draw")
-	println("ST7789 rectangle streaming complete")
+	println("after text draw")
+	println("ST7789 text display complete")
 
 	for {
 		println("alive")
 		time.Sleep(time.Second)
 	}
+}
+
+func drawTextDemo(backend display.Backend) error {
+	var fillScratch [64]byte
+	var glyphScratch [256]byte
+
+	if err := display.FillRect(
+		backend,
+		display.Rect{Width: displayWidth, Height: displayHeight},
+		display.ColorBlack,
+		fillScratch[:],
+	); err != nil {
+		return err
+	}
+
+	_, err := textdraw.DrawString(
+		backend,
+		&spleen8x16.Font,
+		8,
+		16,
+		"Hello TinyGo!",
+		display.ColorWhite,
+		display.ColorBlack,
+		glyphScratch[:],
+	)
+	return err
 }
 
 func drawTestPattern(backend display.Backend) error {
