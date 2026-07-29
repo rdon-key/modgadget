@@ -22,11 +22,8 @@ func MeasureSpans(spans []Span) (Measurement, error) {
 	var measurement Measurement
 	for index := range spans {
 		span := &spans[index]
-		if span.Face == nil {
-			return measurement, fmt.Errorf("text: span %d: font is nil", index)
-		}
-		if !utf8.ValidString(span.Value) {
-			return measurement, fmt.Errorf("text: span %d: value is not valid UTF-8", index)
+		if err := validateSpan(index, span); err != nil {
+			return measurement, err
 		}
 		var err error
 		measurement, err = measureValue(measurement, span.Face, span.Value)
@@ -49,11 +46,8 @@ func DrawSpans(backend display.Backend, spans []Span, penX, baselineY int16, scr
 	currentX := penX
 	for index := range spans {
 		span := &spans[index]
-		if span.Face == nil {
-			return currentX, fmt.Errorf("text: span %d: font is nil", index)
-		}
-		if !utf8.ValidString(span.Value) {
-			return currentX, fmt.Errorf("text: span %d: value is not valid UTF-8", index)
+		if err := validateSpan(index, span); err != nil {
+			return currentX, err
 		}
 		var err error
 		currentX, err = drawValue(backend, span.Face, currentX, baselineY, span.Value, span.Foreground, span.Background, scratch)
@@ -62,4 +56,14 @@ func DrawSpans(backend display.Backend, spans []Span, penX, baselineY int16, scr
 		}
 	}
 	return currentX, nil
+}
+
+func validateSpan(index int, span *Span) error {
+	if span.Face == nil {
+		return fmt.Errorf("text: span %d: font is nil", index)
+	}
+	if !utf8.ValidString(span.Value) {
+		return fmt.Errorf("text: span %d: value is not valid UTF-8", index)
+	}
+	return nil
 }
