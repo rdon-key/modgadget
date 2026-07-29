@@ -1,9 +1,14 @@
 package text
 
 import (
+	"errors"
 	"fmt"
 	"math"
+
+	"github.com/rdon-key/modgadget-fonts/font"
 )
+
+var errLineAdvanceOverflow = errors.New("line advance is outside int16")
 
 // LineMeasurement combines horizontal ink measurement with the typographic
 // metrics of one baseline-aligned line.
@@ -21,44 +26,67 @@ type LineMeasurement struct {
 // measured. A glyph error therefore returns those metrics and the horizontal
 // result through the last successfully processed glyph.
 func MeasureLine(spans []Span) (LineMeasurement, error) {
+	line, _, err := measureLine(spans)
+	return line, err
+}
+
+func measureLine(spans []Span) (LineMeasurement, bool, error) {
 	var line LineMeasurement
-	hasMetrics := false
+	var accumulator lineMetricsAccumulator
+	processed := false
 	for index := range spans {
 		span := &spans[index]
 		if err := validateSpan(index, span); err != nil {
-			return line, err
+			return line, processed, err
 		}
+		if err := accumulator.add(span.Face.Metrics()); err != nil {
+			return line, processed, fmt.Errorf("text: span %d: %w", index, err)
+		}
+		line.Ascent, line.Descent = accumulator.ascent, accumulator.descent
+		line.LineGap, line.AdvanceY = accumulator.lineGap, accumulator.advanceY
 
-		metrics := span.Face.Metrics()
-		candidate := line
-		if !hasMetrics {
-			candidate.Ascent = metrics.Ascent
-			candidate.Descent = metrics.Descent
-			candidate.LineGap = metrics.LineGap
-		} else {
-			if metrics.Ascent > candidate.Ascent {
-				candidate.Ascent = metrics.Ascent
-			}
-			if metrics.Descent > candidate.Descent {
-				candidate.Descent = metrics.Descent
-			}
-			if metrics.LineGap > candidate.LineGap {
-				candidate.LineGap = metrics.LineGap
-			}
-		}
-		advanceY := int32(candidate.Ascent) + int32(candidate.Descent) + int32(candidate.LineGap)
-		if advanceY < math.MinInt16 || advanceY > math.MaxInt16 {
-			return line, fmt.Errorf("text: span %d: line advance is outside int16", index)
-		}
-		candidate.AdvanceY = int16(advanceY)
-		line = candidate
-		hasMetrics = true
-
+		var spanProcessed bool
 		var err error
-		line.Measurement, err = measureValue(line.Measurement, span.Face, span.Value)
+		line.Measurement, spanProcessed, err = measureValueProgress(line.Measurement, span.Face, span.Value)
+		processed = processed || spanProcessed
 		if err != nil {
-			return line, err
+			return line, processed, err
 		}
 	}
-	return line, nil
+	return line, processed, nil
+}
+
+type lineMetricsAccumulator struct {
+	ascent   int16
+	descent  int16
+	lineGap  int16
+	advanceY int16
+	hasValue bool
+}
+
+func (accumulator *lineMetricsAccumulator) add(metrics font.Metrics) error {
+	candidate := *accumulator
+	if !candidate.hasValue {
+		candidate.ascent = metrics.Ascent
+		candidate.descent = metrics.Descent
+		candidate.lineGap = metrics.LineGap
+		candidate.hasValue = true
+	} else {
+		if metrics.Ascent > candidate.ascent {
+			candidate.ascent = metrics.Ascent
+		}
+		if metrics.Descent > candidate.descent {
+			candidate.descent = metrics.Descent
+		}
+		if metrics.LineGap > candidate.lineGap {
+			candidate.lineGap = metrics.LineGap
+		}
+	}
+	advanceY := int32(candidate.ascent) + int32(candidate.descent) + int32(candidate.lineGap)
+	if advanceY < math.MinInt16 || advanceY > math.MaxInt16 {
+		return errLineAdvanceOverflow
+	}
+	candidate.advanceY = int16(advanceY)
+	*accumulator = candidate
+	return nil
 }

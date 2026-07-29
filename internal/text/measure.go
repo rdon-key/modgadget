@@ -43,20 +43,26 @@ func MeasureString(face *font.Font, value string) (Measurement, error) {
 }
 
 func measureValue(measurement Measurement, face *font.Font, value string) (Measurement, error) {
+	measurement, _, err := measureValueProgress(measurement, face, value)
+	return measurement, err
+}
+
+func measureValueProgress(measurement Measurement, face *font.Font, value string) (Measurement, bool, error) {
+	processed := false
 	for _, r := range value {
 		position, err := positionGlyph(face, r, measurement.Advance, 0)
 		if err != nil {
-			return measurement, err
+			return measurement, processed, err
 		}
 		glyph := position.glyph
 		if glyph.Width != 0 && glyph.Height != 0 {
 			maxX := int32(position.x) + int32(glyph.Width)
 			maxY := int32(position.y) + int32(glyph.Height)
 			if maxX < math.MinInt16 || maxX > math.MaxInt16 {
-				return measurement, fmt.Errorf("text: glyph U+%04X maximum X coordinate is outside int16", r)
+				return measurement, processed, fmt.Errorf("text: glyph U+%04X maximum X coordinate is outside int16", r)
 			}
 			if maxY < math.MinInt16 || maxY > math.MaxInt16 {
-				return measurement, fmt.Errorf("text: glyph U+%04X maximum Y coordinate is outside int16", r)
+				return measurement, processed, fmt.Errorf("text: glyph U+%04X maximum Y coordinate is outside int16", r)
 			}
 			glyphBounds := Bounds{MinX: position.x, MinY: position.y, MaxX: int16(maxX), MaxY: int16(maxY)}
 			if !measurement.HasInk {
@@ -67,8 +73,9 @@ func measureValue(measurement Measurement, face *font.Font, value string) (Measu
 			}
 		}
 		measurement.Advance = position.nextX
+		processed = true
 	}
-	return measurement, nil
+	return measurement, processed, nil
 }
 
 func positionGlyph(face *font.Font, r rune, penX, baselineY int16) (glyphPosition, error) {
