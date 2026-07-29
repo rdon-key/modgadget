@@ -92,7 +92,7 @@ func drawTextDemo(backend display.Backend) error {
 		backend,
 		&spleen8x16.Font,
 		8,
-		16,
+		spleen8x16.Font.Metrics().Ascent,
 		"Hello TinyGo!",
 		display.ColorWhite,
 		display.ColorBlack,
