@@ -39,7 +39,10 @@ func MeasureString(face *font.Font, value string) (Measurement, error) {
 	if !utf8.ValidString(value) {
 		return measurement, fmt.Errorf("text: value is not valid UTF-8")
 	}
+	return measureValue(measurement, face, value)
+}
 
+func measureValue(measurement Measurement, face *font.Font, value string) (Measurement, error) {
 	for _, r := range value {
 		position, err := positionGlyph(face, r, measurement.Advance, 0)
 		if err != nil {

@@ -30,7 +30,10 @@ func DrawString(
 	if !utf8.ValidString(value) {
 		return penX, fmt.Errorf("text: value is not valid UTF-8")
 	}
+	return drawValue(backend, face, penX, baselineY, value, foreground, background, scratch)
+}
 
+func drawValue(backend display.Backend, face *font.Font, penX, baselineY int16, value string, foreground, background display.Color565, scratch []byte) (int16, error) {
 	currentX := penX
 	for _, r := range value {
 		position, err := positionGlyph(face, r, currentX, baselineY)
