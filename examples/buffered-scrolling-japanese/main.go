@@ -29,7 +29,7 @@ const (
 var (
 	viewportPixels   [220 * 115 * 2]byte
 	fillScratch      [1024]byte
-	pixelScratch     [4]byte
+	glyphRowScratch  [12 * 2]byte
 	physicalViewport = display.Rect{X: viewportX, Y: viewportY, Width: viewportWidth, Height: viewportHeight}
 )
 
@@ -157,7 +157,7 @@ func runBufferedScrollingJapanese(physical display.Backend) error {
 			surfaceViewportBackend,
 			horizontalPadding,
 			int16(baseline),
-			pixelScratch[:],
+			glyphRowScratch[:],
 		); err != nil {
 			return fmt.Errorf("draw Japanese layout to surface: %w", err)
 		}
@@ -239,7 +239,7 @@ func printLayoutInfo(layout *textdraw.TextLayout, primaryCount, fallbackCount in
 	measurement := layout.Measurement()
 	println("primary font: shinonome12.Font")
 	println("fallback font: spleen8x16.Font")
-	println("direct pixel scratch bytes:", len(pixelScratch))
+	println("glyph row scratch bytes:", len(glyphRowScratch))
 	println("primary glyph count:", primaryCount)
 	println("fallback glyph count:", fallbackCount)
 	println("layout line count:", layout.LineCount())

@@ -90,17 +90,10 @@ func drawLegacyValue(backend display.Backend, face *font.Font, penX, baselineY i
 	return currentX, nil
 }
 
-// drawFontValue streams RGB565 pixels directly from immutable 1-bit bitmap
-// strings. It deliberately does not expand a glyph into a scratch buffer.
+// drawFontValue streams RGB565 rows from immutable 1-bit bitmap strings. It
+// expands only one row at a time into caller-provided scratch space.
 func drawFontValue(backend display.Backend, face Font, penX, baselineY int16, value string, foreground, background display.Color565, scratch []byte) (int16, error) {
 	currentX := penX
-	if len(scratch) < 4 && value != "" {
-		return currentX, fmt.Errorf("text: scratch too small for direct glyph pixels: have %d bytes, need 4", len(scratch))
-	}
-	fg := scratch[:2]
-	bg := scratch[2:4]
-	fg[0], fg[1] = byte(foreground>>8), byte(foreground)
-	bg[0], bg[1] = byte(background>>8), byte(background)
 	for _, r := range value {
 		position, err := positionGlyph(face, r, currentX, baselineY)
 		if err != nil {
@@ -109,6 +102,10 @@ func drawFontValue(backend display.Backend, face Font, penX, baselineY int16, va
 		glyph := position.glyph
 		width, height := int(glyph.Width), int(glyph.Height)
 		if width != 0 && height != 0 {
+			rowPixelBytes := width * 2
+			if len(scratch) < rowPixelBytes {
+				return currentX, fmt.Errorf("text: scratch too small for glyph U+%04X: have %d bytes, need %d", r, len(scratch), rowPixelBytes)
+			}
 			rect := display.Rect{X: position.x, Y: position.y, Width: glyph.Width, Height: glyph.Height}
 			if err := backend.BeginRect(rect.X, rect.Y, rect.Width, rect.Height); err != nil {
 				return currentX, fmt.Errorf("text: draw glyph U+%04X: %w", r, err)
@@ -117,13 +114,15 @@ func drawFontValue(backend display.Backend, face Font, penX, baselineY int16, va
 			for y := 0; y < height; y++ {
 				row := y * rowBytes
 				for x := 0; x < width; x++ {
-					pixel := bg
+					color := background
 					if glyph.Bitmap[row+x/8]&(byte(0x80)>>uint(x&7)) != 0 {
-						pixel = fg
+						color = foreground
 					}
-					if err := backend.WritePixels(pixel); err != nil {
-						return currentX, fmt.Errorf("text: draw glyph U+%04X: %w", r, err)
-					}
+					offset := x * 2
+					scratch[offset], scratch[offset+1] = byte(color>>8), byte(color)
+				}
+				if err := backend.WritePixels(scratch[:rowPixelBytes]); err != nil {
+					return currentX, fmt.Errorf("text: draw glyph U+%04X: %w", r, err)
 				}
 			}
 			if err := backend.EndRect(); err != nil {

@@ -1,6 +1,7 @@
 package text
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/rdon-key/modgadget/internal/display"
@@ -77,6 +78,8 @@ func (font *fixedFont) Metrics() FontMetrics { return font.metrics }
 type pixelSink struct {
 	rects                    [8]display.Rect
 	rectCount, writes, bytes int
+	writeLengths             [64]int
+	maxWrite                 int
 	pixels                   [2048]byte
 }
 
@@ -89,6 +92,10 @@ func (sink *pixelSink) BeginRect(x, y, width, height int16) error {
 func (sink *pixelSink) WritePixels(data []byte) error {
 	copy(sink.pixels[sink.bytes:], data)
 	sink.bytes += len(data)
+	sink.writeLengths[sink.writes] = len(data)
+	if len(data) > sink.maxWrite {
+		sink.maxWrite = len(data)
+	}
 	sink.writes++
 	return nil
 }
@@ -105,7 +112,7 @@ func TestMGFBaselineBitmapAndAdvance(t *testing.T) {
 		{'Z', Glyph{AdvanceX: 5}},
 	}}
 	sink := &pixelSink{}
-	scratch := [4]byte{}
+	scratch := [24]byte{}
 	pen, err := drawFontValue(sink, font, 10, 12, "SJZ", 0xffff, 0, scratch[:])
 	if err != nil || pen != 35 {
 		t.Fatalf("pen=%d err=%v", pen, err)
@@ -119,7 +126,7 @@ func TestMGFBaselineBitmapAndAdvance(t *testing.T) {
 			t.Fatalf("rect %d=%+v", index, sink.rects[index])
 		}
 	}
-	if sink.writes != 17 {
+	if sink.writes != 2 {
 		t.Fatalf("pixel writes=%d", sink.writes)
 	}
 	// Width 9 draws exactly nine pixels; padding bits in the second byte are ignored.
@@ -137,7 +144,7 @@ func TestMGFBaselineBitmapAndAdvance(t *testing.T) {
 func TestMGFMixedTextCommonBaseline(t *testing.T) {
 	_, _, fonts := embeddedFallbackFont()
 	sink := &pixelSink{}
-	scratch := [4]byte{}
+	scratch := [24]byte{}
 	pen, err := drawFontValue(sink, &fonts, 0, 12, "MあA日", 0xffff, 0, scratch[:])
 	if err != nil || pen != 40 {
 		t.Fatalf("pen=%d err=%v", pen, err)
@@ -150,6 +157,86 @@ func TestMGFMixedTextCommonBaseline(t *testing.T) {
 		if sink.rects[index] != want[index] {
 			t.Fatalf("rect %d=%+v want=%+v", index, sink.rects[index], want[index])
 		}
+	}
+	if sink.writes != 56 {
+		t.Fatalf("writes=%d, want 56", sink.writes)
+	}
+	if sink.bytes != 2*(8*16+12*12+8*16+12*12) {
+		t.Fatalf("bytes=%d", sink.bytes)
+	}
+}
+
+func TestMGFRowWrites(t *testing.T) {
+	tests := []struct {
+		name       string
+		glyph      Glyph
+		wantWrites int
+		wantLength int
+		wantBytes  int
+	}{
+		{"12x12", Glyph{Width: 12, Height: 12, AdvanceX: 12, Bitmap: string(make([]byte, 24))}, 12, 24, 12 * 12 * 2},
+		{"8x16", Glyph{Width: 8, Height: 16, AdvanceX: 8, Bitmap: string(make([]byte, 16))}, 16, 16, 8 * 16 * 2},
+		{"9x2", Glyph{Width: 9, Height: 2, AdvanceX: 9, Bitmap: "\x80\x80\x40\xff"}, 2, 18, 9 * 2 * 2},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			font := &fixedFont{}
+			font.glyphs[0].r, font.glyphs[0].g = 'x', test.glyph
+			sink := &pixelSink{}
+			scratch := [24]byte{}
+			if _, err := drawFontValue(sink, font, 0, 0, "x", 0x1234, 0xabcd, scratch[:]); err != nil {
+				t.Fatal(err)
+			}
+			if sink.writes != test.wantWrites || sink.bytes != test.wantBytes || sink.maxWrite != test.wantLength {
+				t.Fatalf("writes=%d bytes=%d max=%d", sink.writes, sink.bytes, sink.maxWrite)
+			}
+			for index := 0; index < sink.writes; index++ {
+				if sink.writeLengths[index] != test.wantLength {
+					t.Fatalf("write %d length=%d", index, sink.writeLengths[index])
+				}
+			}
+		})
+	}
+}
+
+func TestMGFRowPixelsAndPadding(t *testing.T) {
+	font := &fixedFont{}
+	font.glyphs[0].r = 'x'
+	font.glyphs[0].g = Glyph{Width: 9, Height: 2, AdvanceX: 9, Bitmap: "\x80\x80\x40\xff"}
+	sink := &pixelSink{}
+	scratch := [18]byte{}
+	if _, err := drawFontValue(sink, font, 0, 0, "x", 0x1234, 0xabcd, scratch[:]); err != nil {
+		t.Fatal(err)
+	}
+	want := []byte{
+		0x12, 0x34, 0xab, 0xcd, 0xab, 0xcd, 0xab, 0xcd, 0xab, 0xcd, 0xab, 0xcd, 0xab, 0xcd, 0xab, 0xcd, 0x12, 0x34,
+		0xab, 0xcd, 0x12, 0x34, 0xab, 0xcd, 0xab, 0xcd, 0xab, 0xcd, 0xab, 0xcd, 0xab, 0xcd, 0xab, 0xcd, 0x12, 0x34,
+	}
+	if got := sink.pixels[:sink.bytes]; string(got) != string(want) {
+		t.Fatalf("pixels=%x want=%x", got, want)
+	}
+}
+
+func TestMGFRowScratchRequirements(t *testing.T) {
+	font := &fixedFont{}
+	font.glyphs[0].r = 'x'
+	font.glyphs[0].g = Glyph{Width: 12, Height: 1, AdvanceX: 12, Bitmap: "\x00\x00"}
+	font.glyphs[1].r = 'z'
+	font.glyphs[1].g = Glyph{AdvanceX: 3}
+	sink := &pixelSink{}
+	short := [23]byte{}
+	if pen, err := drawFontValue(sink, font, 7, 0, "x", 1, 0, short[:]); err == nil || pen != 7 || !strings.Contains(err.Error(), "have 23") || !strings.Contains(err.Error(), "need 24") {
+		t.Fatalf("pen=%d err=%v", pen, err)
+	}
+	exact := [24]byte{}
+	if pen, err := drawFontValue(sink, font, 7, 0, "x", 1, 0, exact[:]); err != nil || pen != 19 {
+		t.Fatalf("pen=%d err=%v", pen, err)
+	}
+	if pen, err := drawFontValue(sink, font, 5, 0, "z", 1, 0, nil); err != nil || pen != 8 {
+		t.Fatalf("zero width pen=%d err=%v", pen, err)
+	}
+	if pen, err := drawFontValue(sink, font, 5, 0, "", 1, 0, nil); err != nil || pen != 5 {
+		t.Fatalf("empty pen=%d err=%v", pen, err)
 	}
 }
 
@@ -171,7 +258,7 @@ func TestMGFClipping(t *testing.T) {
 		r rune
 		g Glyph
 	}{{'x', Glyph{Width: 3, Height: 2, AdvanceX: 3, BearingX: -1, BearingY: 1, Bitmap: "\xe0\xa0"}}}}
-	scratch := [4]byte{}
+	scratch := [6]byte{}
 	if _, err := drawFontValue(backend, font, 0, 1, "x", 0xffff, 0, scratch[:]); err != nil {
 		t.Fatal(err)
 	}
@@ -183,7 +270,7 @@ func TestMGFClipping(t *testing.T) {
 func TestMGFRenderingAllocations(t *testing.T) {
 	primary, _, fonts := embeddedFallbackFont()
 	sink := &pixelSink{}
-	scratch := [4]byte{}
+	scratch := [24]byte{}
 	tests := []struct {
 		name string
 		call func()
