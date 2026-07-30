@@ -14,3 +14,21 @@ binary files by hand.
 
 See `MGF-ASSETS.md` in the `modgadget-font-assets` repository for the exact
 regeneration commands and source BDF provenance.
+
+## Efont Biwidth assets
+
+The Efont Biwidth assets below were imported from source repository commit
+`66b23862fe6ec38ef362ef74596912231ec14a51` and generated with generator
+repository commit `36141f000687df39c3dad106f5455f55be64e6b0`.
+
+| Font | Source BDF | Source MGF | Embedded output | BDF SHA-256 | MGF SHA-256 | FileSize |
+| --- | --- | --- | --- | --- | --- | ---: |
+| Efont Biwidth 16 | `fonts/efont16/b16.bdf` | `fonts/efont16/efont16-full.mgf` | `internal/fontdata/mgf/efont16/efont16-full.mgf` | `2dd69898adba95a4bb47a7490b54ccb0fc95bd59007fc63fe2c6bb29a9bc5cb5` | `0cbbcc0b0a3845be11d5cd958c2ea092afa6fdd82be9ae82f6d1a87274e9ea16` | 1167336 |
+| Efont Biwidth 24 | `fonts/efont24/b24.bdf` | `fonts/efont24/efont24-full.mgf` | `internal/fontdata/mgf/efont24/efont24-full.mgf` | `f03ad7d046b2b7e976bfba89f500117ef8d11c370055ba4adede866023754ad6` | `d87645e7b45cbf9e9758349a9a337bd38ef832d781e96c19d0596f113ca8f4a7` | 2706726 |
+
+The corresponding upstream notices are preserved under
+`LICENSES/efont-unicode-bdf-0.4.2/`. Its byte-identical `COPYRIGHT` and
+`README.shinonome` files already exist as `LICENSES/shinonome-BSD-3-Clause.txt`
+and `LICENSES/shinonome-NOTICE.txt`, so they are not duplicated. Do not edit
+the MGF binaries by hand; refer to `MGF-ASSETS.md` in the source repository
+when regenerating them.
