@@ -1,7 +1,7 @@
 // Command mgfgen creates ModGadget Font files.
 //
-// This first stage writes only an empty MGF1 header. BDF conversion and glyph
-// generation are intentionally not implemented yet.
+// Without -bdf it writes an empty MGF1 header. With -bdf it converts a BDF
+// font to an uncompressed MGF1 file.
 package main
 
 import (
@@ -26,10 +26,15 @@ func run(args []string, stdout, stderr io.Writer) int {
 	subsetID := flags.String("subset-id", "", "four printable ASCII bytes identifying the subset")
 	region := flags.String("region", "", "two printable ASCII bytes, or empty for no region")
 	output := flags.String("o", "", "output MGF file (required)")
+	bdfPath := flags.String("bdf", "", "input BDF 2.1 or 2.2 font")
+	charsPath := flags.String("chars", "", "UTF-8 file selecting characters from the BDF")
+	missing := flags.String("missing", "error", "missing selected characters: error or skip")
+	assumeUnicode := flags.Bool("assume-unicode", false, "treat an unrecognized BDF charset as Unicode")
+	lineGap := flags.Int("line-gap", 0, "MGF line gap from 0 through 255")
 	flags.Usage = func() {
-		fmt.Fprintln(stderr, "mgfgen creates a header-only empty MGF1 file.")
-		fmt.Fprintln(stderr, "BDF conversion and glyph generation are not implemented yet.")
-		fmt.Fprintln(stderr, "Usage: mgfgen -font-id sh12 -subset-id full -region JP -o empty.mgf")
+		fmt.Fprintln(stderr, "mgfgen creates an uncompressed MGF1 file from BDF, or a header-only empty MGF1 without -bdf.")
+		fmt.Fprintln(stderr, "BDF conversion writes raw 1-bit glyph records; omit -bdf for the header-only mode.")
+		fmt.Fprintln(stderr, "Usage: mgfgen -bdf font.bdf -font-id sh12 -subset-id full -region JP -o font.mgf")
 		flags.PrintDefaults()
 	}
 	if err := flags.Parse(args); err != nil {
@@ -54,6 +59,18 @@ func run(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "mgfgen: -o is required")
 		return 2
 	}
+	if *missing != "error" && *missing != "skip" {
+		fmt.Fprintln(stderr, "mgfgen: -missing must be error or skip")
+		return 2
+	}
+	if *lineGap < 0 || *lineGap > 255 {
+		fmt.Fprintln(stderr, "mgfgen: -line-gap must be from 0 through 255")
+		return 2
+	}
+	if *bdfPath == "" && (*charsPath != "" || *missing != "error" || *assumeUnicode || *lineGap != 0) {
+		fmt.Fprintln(stderr, "mgfgen: BDF conversion flags require -bdf")
+		return 2
+	}
 
 	fontBytes, err := fixedPrintableASCII(*fontID, 4, "font-id")
 	if err != nil {
@@ -72,6 +89,24 @@ func run(args []string, stdout, stderr io.Writer) int {
 			fmt.Fprintln(stderr, err)
 			return 2
 		}
+	}
+	if *bdfPath != "" {
+		options := conversionOptions{
+			bdfPath:       *bdfPath,
+			charsPath:     *charsPath,
+			missing:       *missing,
+			assumeUnicode: *assumeUnicode,
+			lineGap:       uint8(*lineGap),
+			fontID:        fontBytes,
+			subsetID:      subsetBytes,
+			region:        regionBytes,
+			output:        *output,
+		}
+		if err := convertBDF(options, stdout, stderr); err != nil {
+			fmt.Fprintln(stderr, err)
+			return 1
+		}
+		return 0
 	}
 
 	header := mgf.Header{
