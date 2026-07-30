@@ -24,7 +24,7 @@ type Measurement struct {
 }
 
 type glyphPosition struct {
-	glyph font.Glyph
+	glyph Glyph
 	x     int16
 	y     int16
 	nextX int16
@@ -39,15 +39,15 @@ func MeasureString(face *font.Font, value string) (Measurement, error) {
 	if !utf8.ValidString(value) {
 		return measurement, fmt.Errorf("text: value is not valid UTF-8")
 	}
-	return measureValue(measurement, face, value)
+	return measureValue(measurement, legacyFont{face: face}, value)
 }
 
-func measureValue(measurement Measurement, face *font.Font, value string) (Measurement, error) {
+func measureValue(measurement Measurement, face Font, value string) (Measurement, error) {
 	measurement, _, err := measureValueProgress(measurement, face, value)
 	return measurement, err
 }
 
-func measureValueProgress(measurement Measurement, face *font.Font, value string) (Measurement, bool, error) {
+func measureValueProgress(measurement Measurement, face Font, value string) (Measurement, bool, error) {
 	processed := false
 	for _, r := range value {
 		position, err := positionGlyph(face, r, measurement.Advance, 0)
@@ -78,7 +78,7 @@ func measureValueProgress(measurement Measurement, face *font.Font, value string
 	return measurement, processed, nil
 }
 
-func positionGlyph(face *font.Font, r rune, penX, baselineY int16) (glyphPosition, error) {
+func positionGlyph(face Font, r rune, penX, baselineY int16) (glyphPosition, error) {
 	glyph, ok := face.Lookup(r)
 	if !ok {
 		return glyphPosition{}, fmt.Errorf("text: glyph U+%04X is missing or invalid", r)

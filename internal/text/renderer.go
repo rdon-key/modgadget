@@ -30,13 +30,14 @@ func DrawString(
 	if !utf8.ValidString(value) {
 		return penX, fmt.Errorf("text: value is not valid UTF-8")
 	}
-	return drawValue(backend, face, penX, baselineY, value, foreground, background, scratch)
+	return drawLegacyValue(backend, face, penX, baselineY, value, foreground, background, scratch)
 }
 
-func drawValue(backend display.Backend, face *font.Font, penX, baselineY int16, value string, foreground, background display.Color565, scratch []byte) (int16, error) {
+func drawLegacyValue(backend display.Backend, face *font.Font, penX, baselineY int16, value string, foreground, background display.Color565, scratch []byte) (int16, error) {
 	currentX := penX
+	view := legacyFont{face: face}
 	for _, r := range value {
-		position, err := positionGlyph(face, r, currentX, baselineY)
+		position, err := positionGlyph(view, r, currentX, baselineY)
 		if err != nil {
 			return currentX, err
 		}
@@ -81,6 +82,51 @@ func drawValue(backend display.Backend, face *font.Font, penX, baselineY int16, 
 			}
 			rect := display.Rect{X: position.x, Y: position.y, Width: glyph.Width, Height: glyph.Height}
 			if err := display.BlitRGB565(backend, rect, out, stride); err != nil {
+				return currentX, fmt.Errorf("text: draw glyph U+%04X: %w", r, err)
+			}
+		}
+		currentX = position.nextX
+	}
+	return currentX, nil
+}
+
+// drawFontValue streams RGB565 pixels directly from immutable 1-bit bitmap
+// strings. It deliberately does not expand a glyph into a scratch buffer.
+func drawFontValue(backend display.Backend, face Font, penX, baselineY int16, value string, foreground, background display.Color565, scratch []byte) (int16, error) {
+	currentX := penX
+	if len(scratch) < 4 && value != "" {
+		return currentX, fmt.Errorf("text: scratch too small for direct glyph pixels: have %d bytes, need 4", len(scratch))
+	}
+	fg := scratch[:2]
+	bg := scratch[2:4]
+	fg[0], fg[1] = byte(foreground>>8), byte(foreground)
+	bg[0], bg[1] = byte(background>>8), byte(background)
+	for _, r := range value {
+		position, err := positionGlyph(face, r, currentX, baselineY)
+		if err != nil {
+			return currentX, err
+		}
+		glyph := position.glyph
+		width, height := int(glyph.Width), int(glyph.Height)
+		if width != 0 && height != 0 {
+			rect := display.Rect{X: position.x, Y: position.y, Width: glyph.Width, Height: glyph.Height}
+			if err := backend.BeginRect(rect.X, rect.Y, rect.Width, rect.Height); err != nil {
+				return currentX, fmt.Errorf("text: draw glyph U+%04X: %w", r, err)
+			}
+			rowBytes := (width + 7) / 8
+			for y := 0; y < height; y++ {
+				row := y * rowBytes
+				for x := 0; x < width; x++ {
+					pixel := bg
+					if glyph.Bitmap[row+x/8]&(byte(0x80)>>uint(x&7)) != 0 {
+						pixel = fg
+					}
+					if err := backend.WritePixels(pixel); err != nil {
+						return currentX, fmt.Errorf("text: draw glyph U+%04X: %w", r, err)
+					}
+				}
+			}
+			if err := backend.EndRect(); err != nil {
 				return currentX, fmt.Errorf("text: draw glyph U+%04X: %w", r, err)
 			}
 		}

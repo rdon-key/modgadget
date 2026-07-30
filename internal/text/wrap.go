@@ -60,7 +60,7 @@ func wrapExplicitLine(explicit indexedLine, lineIndex int, maxAdvanceX int16, in
 				oversized = false
 				segmentStart = runeStart
 			}
-			position, err := positionGlyph(span.Face, r, penX, 0)
+			position, err := positionGlyph(spanFont(span), r, penX, 0)
 			if err != nil {
 				return wrapped, fmt.Errorf("text: explicit line %d span %d: %w", lineIndex, indexed.inputIndex, err)
 			}
@@ -74,7 +74,7 @@ func wrapExplicitLine(explicit indexedLine, lineIndex int, maxAdvanceX int16, in
 				hasGlyph = false
 				oversized = false
 				segmentStart = runeStart
-				position, err = positionGlyph(span.Face, r, penX, 0)
+				position, err = positionGlyph(spanFont(span), r, penX, 0)
 				if err != nil {
 					return wrapped, fmt.Errorf("text: explicit line %d span %d: %w", lineIndex, indexed.inputIndex, err)
 				}

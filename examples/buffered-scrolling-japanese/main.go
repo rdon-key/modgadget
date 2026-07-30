@@ -6,10 +6,9 @@ import (
 	"math"
 	"time"
 
-	fontpkg "github.com/rdon-key/modgadget-fonts/font"
 	"github.com/rdon-key/modgadget/internal/display"
-	"github.com/rdon-key/modgadget/internal/fontdata/shinonome12"
-	"github.com/rdon-key/modgadget/internal/fontdata/spleen8x16"
+	shinonome12 "github.com/rdon-key/modgadget/internal/fontdata/mgf/shinonome12"
+	spleen8x16 "github.com/rdon-key/modgadget/internal/fontdata/mgf/spleen8x16"
 	"github.com/rdon-key/modgadget/internal/st7789"
 	textdraw "github.com/rdon-key/modgadget/internal/text"
 )
@@ -30,9 +29,14 @@ const (
 var (
 	viewportPixels   [220 * 115 * 2]byte
 	fillScratch      [1024]byte
-	glyphScratch     [288]byte
+	pixelScratch     [4]byte
 	physicalViewport = display.Rect{X: viewportX, Y: viewportY, Width: viewportWidth, Height: viewportHeight}
 )
+
+var japaneseFont = textdraw.FallbackFont{
+	Primary:  textdraw.MGFFont{Font: shinonome12.Font},
+	Fallback: textdraw.MGFFont{Font: spleen8x16.Font},
+}
 
 var _ display.Backend = (*st7789.Device)(nil)
 
@@ -153,7 +157,7 @@ func runBufferedScrollingJapanese(physical display.Backend) error {
 			surfaceViewportBackend,
 			horizontalPadding,
 			int16(baseline),
-			glyphScratch[:],
+			pixelScratch[:],
 		); err != nil {
 			return fmt.Errorf("draw Japanese layout to surface: %w", err)
 		}
@@ -206,21 +210,23 @@ func buildJapaneseLayout(maxAdvanceX int16) (textdraw.TextLayout, int, int, erro
 		{value: "画面転送にはRGB565形式と40MHzのSPI通信を使用しています。限られたメモリを活用しながら、小型端末、ログ表示器、ニュース端末、機器の操作画面に使える表示基盤を目指します。", foreground: display.RGB565(0, 255, 255)},
 	}
 
-	var spans []textdraw.Span
+	spans := make([]textdraw.Span, 0, len(paragraphs))
 	primaryCount := 0
 	fallbackCount := 0
 	for _, paragraph := range paragraphs {
-		var err error
-		spans, primaryCount, fallbackCount, err = appendFontSpans(
-			spans,
-			paragraph.value,
-			paragraph.foreground,
-			primaryCount,
-			fallbackCount,
-		)
-		if err != nil {
-			return textdraw.TextLayout{}, primaryCount, fallbackCount, err
+		for _, r := range paragraph.value {
+			if r == '\n' || r == '\r' || r == '\t' {
+				continue
+			}
+			if _, ok := japaneseFont.Primary.Lookup(r); ok {
+				primaryCount++
+			} else if _, ok := japaneseFont.Fallback.Lookup(r); ok {
+				fallbackCount++
+			} else {
+				return textdraw.TextLayout{}, primaryCount, fallbackCount, fmt.Errorf("Japanese demo fonts are missing U+%04X", r)
+			}
 		}
+		spans = append(spans, textdraw.Span{Font: &japaneseFont, Value: paragraph.value, Foreground: paragraph.foreground, Background: display.ColorBlack})
 	}
 	layout, err := textdraw.NewWrappedTextLayout(spans, maxAdvanceX)
 	if err != nil {
@@ -229,54 +235,11 @@ func buildJapaneseLayout(maxAdvanceX int16) (textdraw.TextLayout, int, int, erro
 	return layout, primaryCount, fallbackCount, nil
 }
 
-func appendFontSpans(spans []textdraw.Span, value string, foreground display.Color565, primaryCount, fallbackCount int) ([]textdraw.Span, int, int, error) {
-	var currentFace *fontpkg.Font
-	segmentStart := 0
-	for runeStart, r := range value {
-		face := currentFace
-		if r != '\n' && r != '\r' && r != '\t' {
-			if _, ok := shinonome12.Font.Lookup(r); ok {
-				face = &shinonome12.Font
-				primaryCount++
-			} else if _, ok := spleen8x16.Font.Lookup(r); ok {
-				face = &spleen8x16.Font
-				fallbackCount++
-			} else {
-				return spans, primaryCount, fallbackCount, fmt.Errorf("Japanese demo fonts are missing U+%04X", r)
-			}
-		} else if face == nil {
-			face = &shinonome12.Font
-		}
-
-		if currentFace == nil {
-			currentFace = face
-		} else if face != currentFace {
-			spans = append(spans, textdraw.Span{
-				Face:       currentFace,
-				Value:      value[segmentStart:runeStart],
-				Foreground: foreground,
-				Background: display.ColorBlack,
-			})
-			segmentStart = runeStart
-			currentFace = face
-		}
-	}
-	if currentFace != nil {
-		spans = append(spans, textdraw.Span{
-			Face:       currentFace,
-			Value:      value[segmentStart:],
-			Foreground: foreground,
-			Background: display.ColorBlack,
-		})
-	}
-	return spans, primaryCount, fallbackCount, nil
-}
-
 func printLayoutInfo(layout *textdraw.TextLayout, primaryCount, fallbackCount int, maxAdvanceX int16, contentHeight, visibleHeight, maxScroll, initialBaseline int32) {
 	measurement := layout.Measurement()
 	println("primary font: shinonome12.Font")
 	println("fallback font: spleen8x16.Font")
-	println("glyph scratch bytes:", len(glyphScratch))
+	println("direct pixel scratch bytes:", len(pixelScratch))
 	println("primary glyph count:", primaryCount)
 	println("fallback glyph count:", fallbackCount)
 	println("layout line count:", layout.LineCount())

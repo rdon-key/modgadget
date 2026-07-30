@@ -11,6 +11,7 @@ import (
 // Span is a consecutive string sharing one font and pair of drawing colors.
 type Span struct {
 	Face       *font.Font
+	Font       Font
 	Value      string
 	Foreground display.Color565
 	Background display.Color565
@@ -26,7 +27,7 @@ func MeasureSpans(spans []Span) (Measurement, error) {
 			return measurement, err
 		}
 		var err error
-		measurement, err = measureValue(measurement, span.Face, span.Value)
+		measurement, err = measureValue(measurement, spanFont(span), span.Value)
 		if err != nil {
 			return measurement, err
 		}
@@ -50,7 +51,11 @@ func DrawSpans(backend display.Backend, spans []Span, penX, baselineY int16, scr
 			return currentX, err
 		}
 		var err error
-		currentX, err = drawValue(backend, span.Face, currentX, baselineY, span.Value, span.Foreground, span.Background, scratch)
+		if span.Font != nil {
+			currentX, err = drawFontValue(backend, span.Font, currentX, baselineY, span.Value, span.Foreground, span.Background, scratch)
+		} else {
+			currentX, err = drawLegacyValue(backend, span.Face, currentX, baselineY, span.Value, span.Foreground, span.Background, scratch)
+		}
 		if err != nil {
 			return currentX, err
 		}
@@ -59,11 +64,21 @@ func DrawSpans(backend display.Backend, spans []Span, penX, baselineY int16, scr
 }
 
 func validateSpan(index int, span *Span) error {
-	if span.Face == nil {
+	if span.Face == nil && span.Font == nil {
 		return fmt.Errorf("text: span %d: font is nil", index)
+	}
+	if span.Face != nil && span.Font != nil {
+		return fmt.Errorf("text: span %d: multiple fonts are set", index)
 	}
 	if !utf8.ValidString(span.Value) {
 		return fmt.Errorf("text: span %d: value is not valid UTF-8", index)
 	}
 	return nil
+}
+
+func spanFont(span *Span) Font {
+	if span.Font != nil {
+		return span.Font
+	}
+	return legacyFont{face: span.Face}
 }

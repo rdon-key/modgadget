@@ -4,8 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"math"
-
-	"github.com/rdon-key/modgadget-fonts/font"
 )
 
 var errLineAdvanceOverflow = errors.New("line advance is outside int16")
@@ -39,7 +37,7 @@ func measureLine(spans []Span) (LineMeasurement, bool, error) {
 		if err := validateSpan(index, span); err != nil {
 			return line, processed, err
 		}
-		if err := accumulator.add(span.Face.Metrics()); err != nil {
+		if err := accumulator.add(spanFont(span).Metrics()); err != nil {
 			return line, processed, fmt.Errorf("text: span %d: %w", index, err)
 		}
 		line.Ascent, line.Descent = accumulator.ascent, accumulator.descent
@@ -47,7 +45,7 @@ func measureLine(spans []Span) (LineMeasurement, bool, error) {
 
 		var spanProcessed bool
 		var err error
-		line.Measurement, spanProcessed, err = measureValueProgress(line.Measurement, span.Face, span.Value)
+		line.Measurement, spanProcessed, err = measureValueProgress(line.Measurement, spanFont(span), span.Value)
 		processed = processed || spanProcessed
 		if err != nil {
 			return line, processed, err
@@ -64,7 +62,7 @@ type lineMetricsAccumulator struct {
 	hasValue bool
 }
 
-func (accumulator *lineMetricsAccumulator) add(metrics font.Metrics) error {
+func (accumulator *lineMetricsAccumulator) add(metrics FontMetrics) error {
 	candidate := *accumulator
 	if !candidate.hasValue {
 		candidate.ascent = metrics.Ascent
