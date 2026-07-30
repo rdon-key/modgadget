@@ -136,6 +136,33 @@ func TestEncodeIndexGlyphOffsetValidation(t *testing.T) {
 	}
 }
 
+func TestEncodeIndexGlyphOffsetMustIncrease(t *testing.T) {
+	header := indexHeader(2, 4)
+	tests := []struct {
+		name    string
+		offsets [2]uint32
+	}{
+		{"duplicate", [2]uint32{header.GlyphDataOffset, header.GlyphDataOffset}},
+		{"descending", [2]uint32{header.GlyphDataOffset + 1, header.GlyphDataOffset}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dst := make([]byte, 2*IndexEntrySize)
+			for position := range dst {
+				dst[position] = 0x5a
+			}
+			want := append([]byte(nil), dst...)
+			entries := []IndexEntry{
+				{Codepoint: 'A', GlyphOffset: tt.offsets[0]},
+				{Codepoint: 'B', GlyphOffset: tt.offsets[1]},
+			}
+			if err := EncodeIndex(dst, header, entries); err == nil || !strings.Contains(err.Error(), "GlyphOffset") || !reflect.DeepEqual(dst, want) {
+				t.Fatalf("err=%v dst=%x", err, dst)
+			}
+		})
+	}
+}
+
 func TestDecodeIndexAndMethods(t *testing.T) {
 	header := indexHeader(3, 8)
 	entries := []IndexEntry{
@@ -220,6 +247,31 @@ func TestDecodeIndexValidation(t *testing.T) {
 	}
 	if _, err := DecodeIndex(string(valid[:header.GlyphDataOffset-1]), header); err == nil {
 		t.Fatal("short index region succeeded")
+	}
+}
+
+func TestDecodeIndexGlyphOffsetMustIncrease(t *testing.T) {
+	header := indexHeader(2, 4)
+	entries := []IndexEntry{
+		{Codepoint: 'A', GlyphOffset: header.GlyphDataOffset},
+		{Codepoint: 'B', GlyphOffset: header.GlyphDataOffset + 1},
+	}
+	valid := encodeIndexFile(t, header, entries)
+	for _, tt := range []struct {
+		name    string
+		offsets [2]uint32
+	}{
+		{"duplicate", [2]uint32{header.GlyphDataOffset, header.GlyphDataOffset}},
+		{"descending", [2]uint32{header.GlyphDataOffset + 1, header.GlyphDataOffset}},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			data := append([]byte(nil), valid...)
+			binary.LittleEndian.PutUint32(data[HeaderSize+4:HeaderSize+IndexEntrySize], tt.offsets[0])
+			binary.LittleEndian.PutUint32(data[HeaderSize+IndexEntrySize+4:HeaderSize+2*IndexEntrySize], tt.offsets[1])
+			if _, err := DecodeIndex(string(data), header); err == nil || !strings.Contains(err.Error(), "GlyphOffset") {
+				t.Fatalf("err=%v", err)
+			}
+		})
 	}
 }
 

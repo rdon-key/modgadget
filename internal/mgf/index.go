@@ -109,6 +109,7 @@ func (index Index) Lookup(r rune) (uint32, bool) {
 
 func validateEntries(entries []IndexEntry, header Header) error {
 	var previous uint32
+	var previousOffset uint32
 	for position, entry := range entries {
 		if !validCodepoint(entry.Codepoint) {
 			return fmt.Errorf("mgf: index entry %d has invalid codepoint U+%04X", position, entry.Codepoint)
@@ -122,13 +123,18 @@ func validateEntries(entries []IndexEntry, header Header) error {
 		if entry.GlyphOffset >= header.FileSize {
 			return fmt.Errorf("mgf: index entry %d GlyphOffset %d is not before FileSize %d", position, entry.GlyphOffset, header.FileSize)
 		}
+		if position != 0 && entry.GlyphOffset <= previousOffset {
+			return fmt.Errorf("mgf: index entry %d GlyphOffset %d is not greater than previous %d", position, entry.GlyphOffset, previousOffset)
+		}
 		previous = entry.Codepoint
+		previousOffset = entry.GlyphOffset
 	}
 	return nil
 }
 
 func validateIndex(index Index, header Header) error {
 	var previous uint32
+	var previousOffset uint32
 	for position := 0; position < index.count; position++ {
 		entry, _ := index.Entry(position)
 		if !validCodepoint(entry.Codepoint) {
@@ -143,7 +149,11 @@ func validateIndex(index Index, header Header) error {
 		if entry.GlyphOffset >= header.FileSize {
 			return fmt.Errorf("mgf: index entry %d GlyphOffset %d is not before FileSize %d", position, entry.GlyphOffset, header.FileSize)
 		}
+		if position != 0 && entry.GlyphOffset <= previousOffset {
+			return fmt.Errorf("mgf: index entry %d GlyphOffset %d is not greater than previous %d", position, entry.GlyphOffset, previousOffset)
+		}
 		previous = entry.Codepoint
+		previousOffset = entry.GlyphOffset
 	}
 	return nil
 }

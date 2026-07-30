@@ -184,7 +184,7 @@ MGF1のヘッダーには文字間隔を持たせない。
 
 ## 5. Flags
 
-MGF1ではFlagsを`0`とする。
+MGF1ではFlagsを`0`とし、非圧縮1-bit row-major bitmapを表す。
 
 将来、次のような属性に使用できる。
 
@@ -218,30 +218,43 @@ IndexSize = GlyphCount * 8
 GlyphDataOffset = 36 + GlyphCount * 8
 ```
 
-各GlyphOffsetは`GlyphDataOffset`以上、`FileSize`未満でなければならない。Glyph Recordの内容と長さはGlyph Indexでは検査しない。
+各GlyphOffsetは`GlyphDataOffset`以上、`FileSize`未満で、厳密な昇順でなければならない。重複offsetは許可しない。Glyph Recordの内容と長さはGlyph Indexでは検査しない。
 固定長entryのため、Codepointに対する検索にはbinary searchを使用できる。
 
 MGF1ではcheckpoint indexやcodepoint deltaを使用しない。これらは将来versionで容量削減が必要になった場合の検討事項とする。
 
-## 7. Glyph Data（未確定）
+## 7. Glyph Data
 
-各Glyph Recordには、少なくとも次の情報が必要になる。
+MGF1のGlyph Recordは10byteの固定長headerと可変長bitmap dataで構成する。
 
-| 項目 | 内容 |
-|---|---|
-| Width | bitmap幅 |
-| Height | bitmap高さ |
-| BearingX | pen位置からbitmap左端までの距離 |
-| BearingY | baselineからbitmap上端までの距離 |
-| AdvanceX | 次のpen位置までの距離 |
-| Bitmap length | 圧縮データのbyte数 |
-| Bitmap data | 1-bit bitmapまたは圧縮bitmap |
+| Offset | Size | 型 | Field | 内容 |
+|---:|---:|---|---|---|
+| 0 | 1 | uint8 | Width | bitmap幅 |
+| 1 | 1 | uint8 | Height | bitmap高さ |
+| 2 | 2 | int16 | AdvanceX | 次のpen位置までの距離 |
+| 4 | 2 | int16 | BearingX | pen位置からbitmap左端までの距離 |
+| 6 | 2 | int16 | BearingY | baselineからbitmap上端までの距離 |
+| 8 | 2 | uint16 | DataLength | bitmap dataのbyte数 |
+| 10 | N | byte[] | Bitmap | 非圧縮1-bit bitmap |
 
-bitmap圧縮にはU8g2方式を参考にした0/1 run-length encodingを検討する。
+複数byte値はlittle-endianで格納する。AdvanceX、BearingX、BearingYは符号付きint16とする。
 
-MGF全体のファイル構造とUnicode索引は独自形式とし、U8g2形式との完全互換は目標にしない。
+Flagsが`0`の場合、Bitmapは次の形式とする。
 
-目標は、bitmap全体をRGB565 scratchへ展開せず、run単位でSurfaceへ描画できること。
+- row-major、top-to-bottom、left-to-right
+- 1 pixelを1 bitで表現
+- 各byteはMSB first
+- 各rowはbyte境界から開始
+- 1行のbyte数は`(Width + 7) / 8`
+- `DataLength = ((Width + 7) / 8) * Height`
+- WidthまたはHeightが0の場合、DataLengthは0
+- row末尾の未使用bitの値は規定しない
+
+Glyph RecordはGlyph Indexと同じ順序で、`GlyphDataOffset`から隙間なく連続配置する。record間のpadding、overlap、未参照record、duplicate offset、末尾のtrailing dataを許可しない。最後のrecord直後が`FileSize`と一致しなければならない。
+
+HeaderのMaxWidthとMaxHeightは、全Glyph Recordにおける実際の最大Widthと最大Heightに一致しなければならない。GlyphCountが0の場合、MaxWidthとMaxHeightはともに0とする。
+
+bitmap圧縮とU8g2方式を参考にしたRLEは将来versionの検討事項とし、MGF1では使用しない。RLE用のFlags値も本versionでは定めない。
 
 ## 8. `go:embed`での利用
 
@@ -285,7 +298,6 @@ MGF readerは最低限、次を検証する。
 
 ## 10. 今後決める項目
 
-- Glyph Recordの正式byte layout
 - U8g2由来RLEの正確なbit形式
 - 固定セルフォントのmetrics省略方法
 - Flagsのbit割り当て
@@ -303,5 +315,6 @@ MGF readerは最低限、次を検証する。
 - 65,535 glyphを超えるフォントの分割仕様は持たない。
 - 行送りはAscent、Descent、LineGapで表現する。
 - 追加の文字間隔はフォントではなくlayout側で扱う。
-- Glyph Indexは8byte固定長形式とし、Glyph Recordの詳細は東雲12全文字の実測後に決定する。
-- bitmap圧縮はU8g2方式を参考にするが、MGF全体は独自形式とする。
+- Glyph Indexは8byte固定長形式とする。
+- Glyph Recordは10byte headerと非圧縮1-bit bitmapで構成する。
+- bitmap圧縮は将来versionでU8g2方式を参考に検討するが、MGF全体は独自形式とする。
