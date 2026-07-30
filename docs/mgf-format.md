@@ -46,7 +46,7 @@ MGF1では、1ファイルに1フォント、1サブセット、1地域情報を
 
 各offsetは、MGFファイル先頭からのbyte位置とする。
 
-Glyph IndexとGlyph Dataの詳細形式は別途決定する。
+Glyph Indexの形式は本仕様の第6節で定める。Glyph Dataの詳細形式は別途決定する。
 
 ## 4. MGF1 Header
 
@@ -197,19 +197,31 @@ MGF1ではFlagsを`0`とする。
 
 ただし、意味が確定するまではbitを割り当てない。
 
-## 6. Glyph Index（未確定）
+## 6. Glyph Index
 
-Glyph IndexはUnicode code pointからGlyph Data内のrecord位置を検索するために使用する。
+Glyph IndexはUnicode code pointからGlyph Data内のGlyph Record位置を検索するために使用する。
+MGF1では1 entry 8byteの固定長形式を使用する。
 
-| 案 | 内容 | 特徴 |
-|---|---|---|
-| 固定長index | `uint32 codepoint + uint32 offset` | 単純でbinary searchしやすい。1 glyphあたり8byte |
-| checkpoint index | 一定数ごとにcodepointとoffsetを記録し、block内は差分表現 | 容量を減らせるがdecoderが複雑 |
-| codepoint delta | 前glyphとの差分を可変長で格納 | 小さいが直接binary searchしにくい |
+| Offset | Size | 型 | Field | 内容 |
+|---:|---:|---|---|---|
+| 0 | 4 | uint32 | Codepoint | Unicode scalar value |
+| 4 | 4 | uint32 | GlyphOffset | MGFファイル先頭からGlyph Record先頭までの絶対byte offset |
 
-MGF1の最初の実装では、東雲12全文字で容量を測定した上で決定する。
+両fieldはlittle-endianで格納する。entryはCodepointの厳密な昇順とし、重複を許可しない。
+Codepointは`U+0000..U+D7FF`または`U+E000..U+10FFFF`のUnicode scalar valueとする。surrogateは許可しない。noncharacterは許可する。
 
-UnicodeはGoの`rune`に合わせ、BMPだけに限定しない。
+Indexのサイズと位置は次のとおりとする。
+
+```
+IndexOffset = 36
+IndexSize = GlyphCount * 8
+GlyphDataOffset = 36 + GlyphCount * 8
+```
+
+各GlyphOffsetは`GlyphDataOffset`以上、`FileSize`未満でなければならない。Glyph Recordの内容と長さはGlyph Indexでは検査しない。
+固定長entryのため、Codepointに対する検索にはbinary searchを使用できる。
+
+MGF1ではcheckpoint indexやcodepoint deltaを使用しない。これらは将来versionで容量削減が必要になった場合の検討事項とする。
 
 ## 7. Glyph Data（未確定）
 
@@ -273,7 +285,6 @@ MGF readerは最低限、次を検証する。
 
 ## 10. 今後決める項目
 
-- Glyph Indexの正式形式
 - Glyph Recordの正式byte layout
 - U8g2由来RLEの正確なbit形式
 - 固定セルフォントのmetrics省略方法
@@ -292,5 +303,5 @@ MGF readerは最低限、次を検証する。
 - 65,535 glyphを超えるフォントの分割仕様は持たない。
 - 行送りはAscent、Descent、LineGapで表現する。
 - 追加の文字間隔はフォントではなくlayout側で扱う。
-- Glyph IndexとGlyph Recordの詳細は、東雲12全文字の実測後に決定する。
+- Glyph Indexは8byte固定長形式とし、Glyph Recordの詳細は東雲12全文字の実測後に決定する。
 - bitmap圧縮はU8g2方式を参考にするが、MGF全体は独自形式とする。

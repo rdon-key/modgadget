@@ -119,11 +119,15 @@ func (header Header) Validate(dataLength uint32) error {
 	if header.HeaderSize != HeaderSize {
 		return fmt.Errorf("mgf: HeaderSize is %d, want %d", header.HeaderSize, HeaderSize)
 	}
-	if header.IndexOffset < uint32(header.HeaderSize) {
-		return fmt.Errorf("mgf: IndexOffset %d is before HeaderSize %d", header.IndexOffset, header.HeaderSize)
+	if header.IndexOffset != HeaderSize {
+		return fmt.Errorf("mgf: IndexOffset is %d, want %d", header.IndexOffset, HeaderSize)
 	}
-	if header.GlyphDataOffset < header.IndexOffset {
-		return fmt.Errorf("mgf: GlyphDataOffset %d is before IndexOffset %d", header.GlyphDataOffset, header.IndexOffset)
+	expectedGlyphDataOffset := uint64(header.IndexOffset) + uint64(header.GlyphCount)*IndexEntrySize
+	if expectedGlyphDataOffset > math.MaxUint32 {
+		return fmt.Errorf("mgf: GlyphDataOffset calculation overflows uint32")
+	}
+	if header.GlyphDataOffset != uint32(expectedGlyphDataOffset) {
+		return fmt.Errorf("mgf: GlyphDataOffset is %d, want %d", header.GlyphDataOffset, expectedGlyphDataOffset)
 	}
 	if header.FileSize < header.GlyphDataOffset {
 		return fmt.Errorf("mgf: FileSize %d is before GlyphDataOffset %d", header.FileSize, header.GlyphDataOffset)
