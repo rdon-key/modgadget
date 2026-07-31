@@ -499,21 +499,20 @@ Markup Parserはタグを解析して`TextSpan`列へ変換する。
 
 ## 13. Font Resolution
 
-Font ManagerはFont StyleからFaceを選択する。
+Font Managerは表示要求に応じてFontStackを選択する。
 
 ```
 type FontManager interface {
-    Resolve(style FontStyle) FontSet
+    Resolve(style FontStyle) FontStack
 }
 ```
 
-FontSetはprimary Faceとfallback chainを持つ。
+FontStackはprimary Fontと固定長のfallback chainを持つ。
 
 ```
-type FontSet struct {
-    Primary   Face
-    Fallbacks []Face
-    Missing   Face
+type FontStack struct {
+    Primary   Font
+    Fallbacks [3]Font
 }
 ```
 
@@ -835,4 +834,3 @@ ModGadget Font Engineは、単なる文字描画ライブラリではない。
 Unicode CJK全文字集合と欧文可変幅フォントを同じbaselineモデルで扱い、Span単位のフォント切り替えと装飾を適用し、小型ディスプレイ向けGUI Engineへ効率的なglyph layoutを提供する。
 
 Font Engineは、Markdown文書、画像、animation、z-indexを持つModGadget GUI Engineのテキスト基盤となる。
-

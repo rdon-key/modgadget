@@ -9,14 +9,14 @@ import (
 	spleenmgf "github.com/rdon-key/modgadget/internal/fontdata/mgf/spleen8x16"
 )
 
-func embeddedFallbackFont() (MGFFont, MGFFont, FallbackFont) {
-	primary := MGFFont{Font: shinonomemgf.Font}
-	fallback := MGFFont{Font: spleenmgf.Font}
-	return primary, fallback, FallbackFont{Primary: primary, Fallback: fallback}
+func embeddedFontStack() (MGFFont, MGFFont, FontStack) {
+	primary := NewMGFFont(shinonomemgf.Font)
+	fallback := NewMGFFont(spleenmgf.Font)
+	return primary, fallback, FontStack{Primary: primary, Fallbacks: [3]Font{fallback}}
 }
 
 func TestMGFFontAdapter(t *testing.T) {
-	primary, _, _ := embeddedFallbackFont()
+	primary, _, _ := embeddedFontStack()
 	metrics := primary.Metrics()
 	if metrics != (FontMetrics{Ascent: 10, Descent: 2}) {
 		t.Fatalf("metrics = %+v", metrics)
@@ -34,8 +34,20 @@ func TestMGFFontAdapter(t *testing.T) {
 	}
 }
 
-func TestFallbackFontLookupAndMetrics(t *testing.T) {
-	primary, fallback, fonts := embeddedFallbackFont()
+func TestNewMGFFontAllocations(t *testing.T) {
+	if allocations := testing.AllocsPerRun(100, func() {
+		font := NewMGFFont(shinonomemgf.Font)
+		if _, ok := font.Lookup('あ'); !ok {
+			panic("lookup")
+		}
+		_ = font.Metrics()
+	}); allocations != 0 {
+		t.Fatalf("allocations = %v", allocations)
+	}
+}
+
+func TestFontStackLookupAndMetrics(t *testing.T) {
+	primary, fallback, fonts := embeddedFontStack()
 	if glyph, ok := fonts.Lookup('あ'); !ok || glyph.BearingY != 10 {
 		t.Fatalf("primary glyph=%+v ok=%v", glyph, ok)
 	}
@@ -142,7 +154,7 @@ func TestMGFBaselineBitmapAndAdvance(t *testing.T) {
 }
 
 func TestMGFMixedTextCommonBaseline(t *testing.T) {
-	_, _, fonts := embeddedFallbackFont()
+	_, _, fonts := embeddedFontStack()
 	sink := &pixelSink{}
 	scratch := [24]byte{}
 	pen, err := drawFontValue(sink, &fonts, 0, 12, "MあA日", 0xffff, 0, scratch[:])
@@ -268,7 +280,7 @@ func TestMGFClipping(t *testing.T) {
 }
 
 func TestMGFRenderingAllocations(t *testing.T) {
-	primary, _, fonts := embeddedFallbackFont()
+	primary, _, fonts := embeddedFontStack()
 	sink := &pixelSink{}
 	scratch := [24]byte{}
 	tests := []struct {

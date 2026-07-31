@@ -41,7 +41,7 @@ func TestNewTextLayoutEmptyInputs(t *testing.T) {
 
 func TestTextLayoutMatchesExistingPipeline(t *testing.T) {
 	face := spanFace(font.Metrics{Ascent: 2, Descent: 1}, []font.GlyphInfo{{Rune: 'a', Width: 1, Height: 1, AdvanceX: 2, BearingY: 1}}, "\x80")
-	spans := []Span{{Face: face, Value: "a\na\n", Foreground: 0x1234, Background: 0xabcd}}
+	spans := []Span{{Font: face, Value: "a\na\n", Foreground: 0x1234, Background: 0xabcd}}
 	lines, err := LinesFromSpans(spans)
 	if err != nil {
 		t.Fatal(err)
@@ -60,15 +60,15 @@ func TestTextLayoutDrawsRepeatedlyWithSavedStyles(t *testing.T) {
 	face := spanFace(font.Metrics{Ascent: 2, Descent: 1}, []font.GlyphInfo{{Rune: 'a', Width: 2, Height: 1, AdvanceX: 3, BearingY: 1}}, "\x80")
 	otherFace := spanFace(font.Metrics{Ascent: 9}, nil, "")
 	spans := []Span{
-		{Face: face, Value: "a", Foreground: 0x1234, Background: 0xabcd},
-		{Face: face, Value: "a\na", Foreground: 0x5678, Background: 0x9abc},
+		{Font: face, Value: "a", Foreground: 0x1234, Background: 0xabcd},
+		{Font: face, Value: "a\na", Foreground: 0x5678, Background: 0x9abc},
 	}
 	layout, err := NewTextLayout(spans)
 	if err != nil {
 		t.Fatal(err)
 	}
 	wantMeasurement := layout.Measurement()
-	spans[0].Face = otherFace
+	spans[0].Font = otherFace
 	spans[0].Value = "changed"
 	spans[0].Foreground = 0
 	spans[0].Background = 0
@@ -115,10 +115,10 @@ func TestNewTextLayoutErrorsReturnZeroLayout(t *testing.T) {
 		text  string
 	}{
 		{"nil face", []Span{{Value: ""}}, "span 0"},
-		{"invalid UTF-8", []Span{{Face: valid, Value: string([]byte{0xff})}}, "span 0"},
-		{"missing glyph", []Span{{Face: valid, Value: "z"}}, "U+007A"},
-		{"line metrics overflow", []Span{{Face: lineOverflowA, Value: ""}, {Face: lineOverflowB, Value: ""}}, "line advance"},
-		{"glyph bounds overflow", []Span{{Face: boundsOverflow, Value: "a"}}, "U+0061"},
+		{"invalid UTF-8", []Span{{Font: valid, Value: string([]byte{0xff})}}, "span 0"},
+		{"missing glyph", []Span{{Font: valid, Value: "z"}}, "U+007A"},
+		{"line metrics overflow", []Span{{Font: lineOverflowA, Value: ""}, {Font: lineOverflowB, Value: ""}}, "line advance"},
+		{"glyph bounds overflow", []Span{{Font: boundsOverflow, Value: "a"}}, "U+0061"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -133,7 +133,7 @@ func TestNewTextLayoutErrorsReturnZeroLayout(t *testing.T) {
 func TestTextLayoutDrawPreservesDrawLinesPartialError(t *testing.T) {
 	empty := spanFace(font.Metrics{Ascent: 3}, nil, "")
 	drawn := spanFace(font.Metrics{Ascent: 2}, []font.GlyphInfo{{Rune: 'a', Width: 1, Height: 1, AdvanceX: 1}}, "\x80")
-	layout, err := NewTextLayout([]Span{{Face: empty, Value: "\n"}, {Face: drawn, Value: "a"}})
+	layout, err := NewTextLayout([]Span{{Font: empty, Value: "\n"}, {Font: drawn, Value: "a"}})
 	if err != nil {
 		t.Fatal(err)
 	}

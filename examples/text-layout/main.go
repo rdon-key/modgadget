@@ -6,8 +6,8 @@ import (
 	"time"
 
 	"github.com/rdon-key/modgadget/internal/display"
-	"github.com/rdon-key/modgadget/internal/fontdata/shinonome12"
-	"github.com/rdon-key/modgadget/internal/fontdata/spleen8x16"
+	"github.com/rdon-key/modgadget/internal/fontdata/mgf/shinonome12"
+	"github.com/rdon-key/modgadget/internal/fontdata/mgf/spleen8x16"
 	"github.com/rdon-key/modgadget/internal/st7789"
 	textdraw "github.com/rdon-key/modgadget/internal/text"
 )
@@ -90,10 +90,10 @@ func drawLayoutDemo(backend display.Backend) error {
 	}
 
 	asciiLayout, err := textdraw.NewTextLayout([]textdraw.Span{
-		{Face: &spleen8x16.Font, Value: "Mod", Foreground: display.ColorWhite, Background: display.ColorBlack},
-		{Face: &spleen8x16.Font, Value: "Gadget\n", Foreground: display.ColorGreen, Background: display.ColorBlack},
-		{Face: &spleen8x16.Font, Value: "prepared ", Foreground: display.ColorBlue, Background: display.ColorBlack},
-		{Face: &spleen8x16.Font, Value: "layout", Foreground: display.ColorRed, Background: display.ColorBlack},
+		{Font: textdraw.NewMGFFont(spleen8x16.Font), Value: "Mod", Foreground: display.ColorWhite, Background: display.ColorBlack},
+		{Font: textdraw.NewMGFFont(spleen8x16.Font), Value: "Gadget\n", Foreground: display.ColorGreen, Background: display.ColorBlack},
+		{Font: textdraw.NewMGFFont(spleen8x16.Font), Value: "prepared ", Foreground: display.ColorBlue, Background: display.ColorBlack},
+		{Font: textdraw.NewMGFFont(spleen8x16.Font), Value: "layout", Foreground: display.ColorRed, Background: display.ColorBlack},
 	})
 	if err != nil {
 		return fmt.Errorf("build ASCII layout: %w", err)
@@ -107,7 +107,7 @@ func drawLayoutDemo(backend display.Backend) error {
 	}
 
 	japaneseLayout, err := textdraw.NewTextLayout([]textdraw.Span{
-		{Face: &shinonome12.Font, Value: "日本語表示", Foreground: display.ColorWhite, Background: display.ColorBlack},
+		{Font: textdraw.NewMGFFont(shinonome12.Font), Value: "日本語表示", Foreground: display.ColorWhite, Background: display.ColorBlack},
 	})
 	if err != nil {
 		return fmt.Errorf("build Japanese layout: %w", err)

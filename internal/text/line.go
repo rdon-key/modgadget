@@ -37,7 +37,7 @@ func measureLine(spans []Span) (LineMeasurement, bool, error) {
 		if err := validateSpan(index, span); err != nil {
 			return line, processed, err
 		}
-		if err := accumulator.add(spanFont(span).Metrics()); err != nil {
+		if err := accumulator.add(span.Font.Metrics()); err != nil {
 			return line, processed, fmt.Errorf("text: span %d: %w", index, err)
 		}
 		line.Ascent, line.Descent = accumulator.ascent, accumulator.descent
@@ -45,7 +45,7 @@ func measureLine(spans []Span) (LineMeasurement, bool, error) {
 
 		var spanProcessed bool
 		var err error
-		line.Measurement, spanProcessed, err = measureValueProgress(line.Measurement, spanFont(span), span.Value)
+		line.Measurement, spanProcessed, err = measureValueProgress(line.Measurement, span.Font, span.Value)
 		processed = processed || spanProcessed
 		if err != nil {
 			return line, processed, err

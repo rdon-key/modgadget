@@ -2,7 +2,7 @@ package main
 
 import (
 	"github.com/rdon-key/modgadget/internal/display"
-	"github.com/rdon-key/modgadget/internal/fontdata/spleen8x16"
+	"github.com/rdon-key/modgadget/internal/fontdata/mgf/spleen8x16"
 	"github.com/rdon-key/modgadget/internal/st7789"
 	textdraw "github.com/rdon-key/modgadget/internal/text"
 	"machine"
@@ -90,9 +90,9 @@ func drawTextDemo(backend display.Backend) error {
 
 	_, err := textdraw.DrawString(
 		backend,
-		&spleen8x16.Font,
+		textdraw.NewMGFFont(spleen8x16.Font),
 		8,
-		spleen8x16.Font.Metrics().Ascent,
+		textdraw.NewMGFFont(spleen8x16.Font).Metrics().Ascent,
 		"Hello TinyGo!",
 		display.ColorWhite,
 		display.ColorBlack,

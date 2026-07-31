@@ -2,7 +2,7 @@ package main
 
 import (
 	"github.com/rdon-key/modgadget/internal/display"
-	"github.com/rdon-key/modgadget/internal/fontdata/shinonome12"
+	"github.com/rdon-key/modgadget/internal/fontdata/mgf/shinonome12"
 	"github.com/rdon-key/modgadget/internal/st7789"
 	textdraw "github.com/rdon-key/modgadget/internal/text"
 	"machine"
@@ -88,9 +88,9 @@ func drawTextDemo(backend display.Backend) error {
 
 	_, err := textdraw.DrawString(
 		backend,
-		&shinonome12.Font,
+		textdraw.NewMGFFont(shinonome12.Font),
 		12,
-		shinonome12.Font.Metrics().Ascent,
+		textdraw.NewMGFFont(shinonome12.Font).Metrics().Ascent,
 		"日本語表示",
 		display.ColorWhite,
 		display.ColorBlack,

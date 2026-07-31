@@ -32,7 +32,7 @@ func (sink *efontSink) EndRect() error { return nil }
 func (sink *efontSink) reset()         { *sink = efontSink{} }
 
 func embeddedSizeFonts() (MGFFont, MGFFont, MGFFont) {
-	return MGFFont{Font: shinonomemgf.Font}, MGFFont{Font: efont16mgf.Font}, MGFFont{Font: efont24mgf.Font}
+	return NewMGFFont(shinonomemgf.Font), NewMGFFont(efont16mgf.Font), NewMGFFont(efont24mgf.Font)
 }
 
 func TestEfontMetricsAndMixedSizeLine(t *testing.T) {

@@ -4,8 +4,6 @@ import (
 	"fmt"
 	"math"
 	"unicode/utf8"
-
-	"github.com/rdon-key/modgadget-fonts/font"
 )
 
 // Bounds is a half-open ink rectangle relative to pen X 0 and baseline Y 0.
@@ -31,15 +29,15 @@ type glyphPosition struct {
 }
 
 // MeasureString measures one line without drawing it.
-func MeasureString(face *font.Font, value string) (Measurement, error) {
+func MeasureString(font Font, value string) (Measurement, error) {
 	var measurement Measurement
-	if face == nil {
+	if font == nil {
 		return measurement, fmt.Errorf("text: font is nil")
 	}
 	if !utf8.ValidString(value) {
 		return measurement, fmt.Errorf("text: value is not valid UTF-8")
 	}
-	return measureValue(measurement, legacyFont{face: face}, value)
+	return measureValue(measurement, font, value)
 }
 
 func measureValue(measurement Measurement, face Font, value string) (Measurement, error) {

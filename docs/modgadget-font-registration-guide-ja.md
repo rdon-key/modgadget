@@ -653,9 +653,7 @@ if allocations != 0 {
 既存の`text.MGFFont`を使用します。
 
 ```go
-font := text.MGFFont{
-	Font: example16.Font,
-}
+font := text.NewMGFFont(example16.Font)
 ```
 
 新しいadapterはfontごとに作りません。

@@ -44,7 +44,7 @@ func TestWrapSpansGreedyAdvance(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			face := asciiAdvanceFace(tt.value, tt.advance)
-			lines, err := WrapSpans([]Span{{Face: face, Value: tt.value}}, tt.width)
+			lines, err := WrapSpans([]Span{{Font: face, Value: tt.value}}, tt.width)
 			if err != nil || !sameSingleSpanLines(lines, tt.want) {
 				t.Fatalf("lines=%v want=%v err=%v", lines, tt.want, err)
 			}
@@ -59,18 +59,18 @@ func TestWrapSpansKeepsOversizedGlyphAloneBeforeNegativeAdvance(t *testing.T) {
 		{Rune: 'c', AdvanceX: 2},
 	}, "")
 
-	lines, err := WrapSpans([]Span{{Face: face, Value: "ab"}}, 3)
+	lines, err := WrapSpans([]Span{{Font: face, Value: "ab"}}, 3)
 	if err != nil || !sameSingleSpanLines(lines, []string{"a", "b"}) {
 		t.Fatalf("same span: lines=%v err=%v", lines, err)
 	}
 
-	spans := []Span{{Face: face, Value: "a"}, {Face: face, Value: "b"}}
+	spans := []Span{{Font: face, Value: "a"}, {Font: face, Value: "b"}}
 	lines, err = WrapSpans(spans, 3)
 	if err != nil || len(lines) != 2 || len(lines[0].Spans) != 1 || len(lines[1].Spans) != 1 || lines[0].Spans[0] != spans[0] || lines[1].Spans[0] != spans[1] {
 		t.Fatalf("span boundary: lines=%v err=%v", lines, err)
 	}
 
-	lines, err = WrapSpans([]Span{{Face: face, Value: "abc"}}, 3)
+	lines, err = WrapSpans([]Span{{Font: face, Value: "abc"}}, 3)
 	if err != nil || !sameSingleSpanLines(lines, []string{"a", "bc"}) {
 		t.Fatalf("negative advance after oversized: lines=%v err=%v", lines, err)
 	}
@@ -92,7 +92,7 @@ func TestWrapSpansExplicitLFAndEmptySpans(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			lines, err := WrapSpans([]Span{{Face: face, Value: tt.value}}, 8)
+			lines, err := WrapSpans([]Span{{Font: face, Value: tt.value}}, 8)
 			if err != nil || !sameSingleSpanLines(lines, tt.want) {
 				t.Fatalf("lines=%v want=%v err=%v", lines, tt.want, err)
 			}
@@ -104,14 +104,14 @@ func TestWrapSpansPreservesStylesAndSpanBoundaries(t *testing.T) {
 	faceA := asciiAdvanceFace("ab", 4)
 	faceB := asciiAdvanceFace("cd", 4)
 	input := []Span{
-		{Face: faceA, Value: "ab", Foreground: 0x1234, Background: 0xabcd},
-		{Face: faceB, Value: "cd", Foreground: 0x5678, Background: 0x9abc},
+		{Font: faceA, Value: "ab", Foreground: 0x1234, Background: 0xabcd},
+		{Font: faceB, Value: "cd", Foreground: 0x5678, Background: 0x9abc},
 	}
 	lines, err := WrapSpans(input, 12)
 	if err != nil || len(lines) != 2 || len(lines[0].Spans) != 2 || len(lines[1].Spans) != 1 {
 		t.Fatalf("lines=%v err=%v", lines, err)
 	}
-	if lines[0].Spans[0] != input[0] || lines[0].Spans[1].Face != faceB || lines[0].Spans[1].Value != "c" || lines[0].Spans[1].Foreground != 0x5678 || lines[0].Spans[1].Background != 0x9abc || lines[1].Spans[0].Value != "d" {
+	if lines[0].Spans[0] != input[0] || lines[0].Spans[1].Font != faceB || lines[0].Spans[1].Value != "c" || lines[0].Spans[1].Foreground != 0x5678 || lines[0].Spans[1].Background != 0x9abc || lines[1].Spans[0].Value != "d" {
 		t.Fatalf("lines=%+v", lines)
 	}
 	if input[0].Value != "ab" || input[1].Value != "cd" {
@@ -122,21 +122,21 @@ func TestWrapSpansPreservesStylesAndSpanBoundaries(t *testing.T) {
 func TestWrapSpansKeepsExplicitEmptySpanWithoutAutomaticEmptySpan(t *testing.T) {
 	faceA := asciiAdvanceFace("a", 4)
 	faceB := asciiAdvanceFace("b", 4)
-	lines, err := WrapSpans([]Span{{Face: faceA, Value: "a\n"}, {Face: faceB, Value: "b"}}, 3)
+	lines, err := WrapSpans([]Span{{Font: faceA, Value: "a\n"}, {Font: faceB, Value: "b"}}, 3)
 	if err != nil || len(lines) != 2 {
 		t.Fatalf("lines=%v err=%v", lines, err)
 	}
 	if len(lines[0].Spans) != 1 || lines[0].Spans[0].Value != "a" {
 		t.Fatalf("automatic line=%v", lines[0].Spans)
 	}
-	if len(lines[1].Spans) != 2 || lines[1].Spans[0].Face != faceA || lines[1].Spans[0].Value != "" || lines[1].Spans[1].Face != faceB || lines[1].Spans[1].Value != "b" {
+	if len(lines[1].Spans) != 2 || lines[1].Spans[0].Font != faceA || lines[1].Spans[0].Value != "" || lines[1].Spans[1].Font != faceB || lines[1].Spans[1].Value != "b" {
 		t.Fatalf("explicit line=%v", lines[1].Spans)
 	}
 }
 
 func TestWrapSpansDoesNotSplitUTF8Rune(t *testing.T) {
 	face := spanFace(font.Metrics{}, []font.GlyphInfo{{Rune: '日', AdvanceX: 4}, {Rune: '本', AdvanceX: 4}, {Rune: '語', AdvanceX: 4}}, "")
-	lines, err := WrapSpans([]Span{{Face: face, Value: "日本語"}}, 8)
+	lines, err := WrapSpans([]Span{{Font: face, Value: "日本語"}}, 8)
 	if err != nil || !sameSingleSpanLines(lines, []string{"日本", "語"}) {
 		t.Fatalf("lines=%v err=%v", lines, err)
 	}
@@ -145,44 +145,44 @@ func TestWrapSpansDoesNotSplitUTF8Rune(t *testing.T) {
 func TestWrapSpansErrorsAndPartialResult(t *testing.T) {
 	face := asciiAdvanceFace("abcd", 2)
 	t.Run("unfinished explicit line", func(t *testing.T) {
-		lines, err := WrapSpans([]Span{{Face: face, Value: "a"}, {Value: ""}}, 4)
+		lines, err := WrapSpans([]Span{{Font: face, Value: "a"}, {Value: ""}}, 4)
 		if err == nil || len(lines) != 0 || !strings.Contains(err.Error(), "explicit line 0") || !strings.Contains(err.Error(), "span 1") {
 			t.Fatalf("lines=%v err=%v", lines, err)
 		}
 	})
 	t.Run("completed line before LF", func(t *testing.T) {
-		lines, err := WrapSpans([]Span{{Face: face, Value: "a\n"}, {Value: ""}}, 4)
+		lines, err := WrapSpans([]Span{{Font: face, Value: "a\n"}, {Value: ""}}, 4)
 		if err == nil || !sameSingleSpanLines(lines, []string{"a"}) || !strings.Contains(err.Error(), "explicit line 1") {
 			t.Fatalf("lines=%v err=%v", lines, err)
 		}
 	})
 	t.Run("completed automatic wrap in partial explicit line", func(t *testing.T) {
-		lines, err := WrapSpans([]Span{{Face: face, Value: "a\nabcd"}, {Value: ""}}, 4)
+		lines, err := WrapSpans([]Span{{Font: face, Value: "a\nabcd"}, {Value: ""}}, 4)
 		if err == nil || !sameSingleSpanLines(lines, []string{"a", "ab"}) || !strings.Contains(err.Error(), "explicit line 1") {
 			t.Fatalf("lines=%v err=%v", lines, err)
 		}
 	})
 	t.Run("input span index after explicit lines", func(t *testing.T) {
-		lines, err := WrapSpans([]Span{{Face: face, Value: "a\n"}, {Face: face, Value: "b\n"}, {Face: face, Value: "Z"}}, 4)
+		lines, err := WrapSpans([]Span{{Font: face, Value: "a\n"}, {Font: face, Value: "b\n"}, {Font: face, Value: "Z"}}, 4)
 		if err == nil || !sameLineText(lines, []string{"a", "b"}) || !strings.Contains(err.Error(), "explicit line 2") || !strings.Contains(err.Error(), "span 2") || !strings.Contains(err.Error(), "U+005A") {
 			t.Fatalf("lines=%v err=%v", lines, err)
 		}
 	})
 	t.Run("input span index after automatic wrap", func(t *testing.T) {
-		lines, err := WrapSpans([]Span{{Face: face, Value: "abc"}, {Face: face, Value: "Z"}}, 4)
+		lines, err := WrapSpans([]Span{{Font: face, Value: "abc"}, {Font: face, Value: "Z"}}, 4)
 		if err == nil || !sameSingleSpanLines(lines, []string{"ab"}) || !strings.Contains(err.Error(), "explicit line 0") || !strings.Contains(err.Error(), "span 1") || !strings.Contains(err.Error(), "U+005A") {
 			t.Fatalf("lines=%v err=%v", lines, err)
 		}
 	})
 	t.Run("invalid UTF-8", func(t *testing.T) {
-		lines, err := WrapSpans([]Span{{Face: face, Value: "a\n"}, {Face: face, Value: string([]byte{0xff})}}, 4)
+		lines, err := WrapSpans([]Span{{Font: face, Value: "a\n"}, {Font: face, Value: string([]byte{0xff})}}, 4)
 		if err == nil || !sameSingleSpanLines(lines, []string{"a"}) || !strings.Contains(err.Error(), "explicit line 1") || !strings.Contains(err.Error(), "span 1") {
 			t.Fatalf("lines=%v err=%v", lines, err)
 		}
 	})
 	t.Run("advance overflow", func(t *testing.T) {
 		overflowFace := spanFace(font.Metrics{}, []font.GlyphInfo{{Rune: 'a', AdvanceX: math.MaxInt16}}, "")
-		lines, err := WrapSpans([]Span{{Face: overflowFace, Value: "aa"}}, math.MaxInt16)
+		lines, err := WrapSpans([]Span{{Font: overflowFace, Value: "aa"}}, math.MaxInt16)
 		if err == nil || len(lines) != 0 || !strings.Contains(err.Error(), "span 0") || !strings.Contains(err.Error(), "U+0061") {
 			t.Fatalf("lines=%v err=%v", lines, err)
 		}
@@ -203,7 +203,7 @@ func TestWrappedTextLayoutIntegration(t *testing.T) {
 		{Rune: 'a', Width: 1, Height: 1, AdvanceX: 4, BearingY: 1},
 		{Rune: 'b', BitmapOffset: 1, Width: 1, Height: 1, AdvanceX: 4, BearingY: 1},
 	}, "\x80\x80")
-	spans := []Span{{Face: face, Value: "ab", Foreground: display.ColorWhite}, {Face: face, Value: "ab", Foreground: display.ColorGreen}}
+	spans := []Span{{Font: face, Value: "ab", Foreground: display.ColorWhite}, {Font: face, Value: "ab", Foreground: display.ColorGreen}}
 	lines, err := WrapSpans(spans, 8)
 	if err != nil {
 		t.Fatal(err)
@@ -237,7 +237,7 @@ func TestWrappedTextLayoutIntegration(t *testing.T) {
 	}
 }
 
-func asciiAdvanceFace(chars string, advance int16) *font.Font {
+func asciiAdvanceFace(chars string, advance int16) Font {
 	seen := map[rune]bool{}
 	glyphs := make([]font.GlyphInfo, 0, len(chars))
 	for _, r := range chars {

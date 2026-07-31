@@ -33,9 +33,9 @@ var (
 	physicalViewport = display.Rect{X: viewportX, Y: viewportY, Width: viewportWidth, Height: viewportHeight}
 )
 
-var japaneseFont = textdraw.FallbackFont{
-	Primary:  textdraw.MGFFont{Font: shinonome12.Font},
-	Fallback: textdraw.MGFFont{Font: spleen8x16.Font},
+var japaneseFont = textdraw.FontStack{
+	Primary:   textdraw.NewMGFFont(shinonome12.Font),
+	Fallbacks: [3]textdraw.Font{textdraw.NewMGFFont(spleen8x16.Font)},
 }
 
 var _ display.Backend = (*st7789.Device)(nil)

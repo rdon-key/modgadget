@@ -64,15 +64,11 @@ func DrawLines(backend display.Backend, lines []Line, penX, firstBaselineY int16
 			if err := validateSpan(spanIndex, span); err != nil {
 				return baselineY, fmt.Errorf("text: line %d: %w", index, err)
 			}
-			if err := accumulator.add(spanFont(span).Metrics()); err != nil {
+			if err := accumulator.add(span.Font.Metrics()); err != nil {
 				return baselineY, fmt.Errorf("text: line %d: text: span %d: %w", index, spanIndex, err)
 			}
 			var err error
-			if span.Font != nil {
-				currentPenX, err = drawFontValue(backend, span.Font, currentPenX, baselineY, span.Value, span.Foreground, span.Background, scratch)
-			} else {
-				currentPenX, err = drawLegacyValue(backend, span.Face, currentPenX, baselineY, span.Value, span.Foreground, span.Background, scratch)
-			}
+			currentPenX, err = drawFontValue(backend, span.Font, currentPenX, baselineY, span.Value, span.Foreground, span.Background, scratch)
 			if err != nil {
 				return baselineY, fmt.Errorf("text: line %d: %w", index, err)
 			}

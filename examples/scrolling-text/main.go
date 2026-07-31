@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/rdon-key/modgadget/internal/display"
-	"github.com/rdon-key/modgadget/internal/fontdata/spleen8x16"
+	"github.com/rdon-key/modgadget/internal/fontdata/mgf/spleen8x16"
 	"github.com/rdon-key/modgadget/internal/st7789"
 	textdraw "github.com/rdon-key/modgadget/internal/text"
 )
@@ -68,7 +68,6 @@ func main() {
 		return
 	}
 }
-
 
 func runScrollingText(backend display.Backend) error {
 	var fillScratch [64]byte
@@ -220,17 +219,16 @@ func runScrollingText(backend display.Backend) error {
 	}
 }
 
-
 func buildScrollingLayout(maxAdvanceX int16) (textdraw.TextLayout, error) {
 	return textdraw.NewWrappedTextLayout([]textdraw.Span{
 		{
-			Face:       &spleen8x16.Font,
+			Font:       textdraw.NewMGFFont(spleen8x16.Font),
 			Value:      "ModGadget scrolling text\n\n",
 			Foreground: display.RGB565(255, 255, 0),
 			Background: display.ColorBlack,
 		},
 		{
-			Face: &spleen8x16.Font,
+			Font: textdraw.NewMGFFont(spleen8x16.Font),
 			Value: "This text is wrapped to the viewport width. " +
 				"The prepared layout is built only once. " +
 				"Each frame reuses the same glyph data. " +
@@ -239,7 +237,7 @@ func buildScrollingLayout(maxAdvanceX int16) (textdraw.TextLayout, error) {
 			Background: display.ColorBlack,
 		},
 		{
-			Face: &spleen8x16.Font,
+			Font: textdraw.NewMGFFont(spleen8x16.Font),
 			Value: "No full screen text buffer is required. " +
 				"Scrolling only changes the first baseline. " +
 				"This is the foundation for logs and consoles. " +

@@ -1,7 +1,7 @@
 package text
 
 import (
-	fontpkg "github.com/rdon-key/modgadget-fonts/font"
+	"github.com/rdon-key/modgadget/internal/display"
 	"github.com/rdon-key/modgadget/internal/mgf"
 )
 
@@ -35,12 +35,15 @@ type Font interface {
 
 // MGFFont adapts a validated MGF font to the text renderer.
 type MGFFont struct {
-	Font mgf.Font
+	source mgf.Font
 }
+
+// NewMGFFont adapts an already validated MGF font.
+func NewMGFFont(source mgf.Font) MGFFont { return MGFFont{source: source} }
 
 // Lookup returns a glyph whose bitmap still refers to the embedded MGF data.
 func (font MGFFont) Lookup(r rune) (Glyph, bool) {
-	glyph, ok := font.Font.Lookup(r)
+	glyph, ok := font.source.Lookup(r)
 	if !ok {
 		return Glyph{}, false
 	}
@@ -52,63 +55,94 @@ func (font MGFFont) Lookup(r rune) (Glyph, bool) {
 
 // Metrics returns the MGF header's typographic metrics.
 func (font MGFFont) Metrics() FontMetrics {
-	header := font.Font.Header()
+	header := font.source.Header()
 	return FontMetrics{Ascent: int16(header.Ascent), Descent: int16(header.Descent), LineGap: int16(header.LineGap)}
 }
 
-// FallbackFont searches Primary before Fallback.
-type FallbackFont struct {
-	Primary  Font
-	Fallback Font
+// FontStack searches fonts of the same display size in priority order.
+// When more than one font contains a code point, the first font wins.
+type FontStack struct {
+	Primary   Font
+	Fallbacks [3]Font
 }
 
-// Lookup returns the primary glyph when both fonts contain r.
-func (font FallbackFont) Lookup(r rune) (Glyph, bool) {
-	if font.Primary != nil {
-		if glyph, ok := font.Primary.Lookup(r); ok {
+// Lookup searches Primary followed by Fallbacks in array order.
+func (stack FontStack) Lookup(r rune) (Glyph, bool) {
+	if stack.Primary != nil {
+		if glyph, ok := stack.Primary.Lookup(r); ok {
 			return glyph, true
 		}
 	}
-	if font.Fallback != nil {
-		return font.Fallback.Lookup(r)
+	for index := range stack.Fallbacks {
+		if stack.Fallbacks[index] != nil {
+			if glyph, ok := stack.Fallbacks[index].Lookup(r); ok {
+				return glyph, true
+			}
+		}
 	}
 	return Glyph{}, false
 }
 
 // Metrics returns the component-wise maximum line metrics.
-func (font FallbackFont) Metrics() FontMetrics {
-	if font.Primary == nil {
-		if font.Fallback == nil {
-			return FontMetrics{}
-		}
-		return font.Fallback.Metrics()
+func (stack FontStack) Metrics() FontMetrics {
+	var result FontMetrics
+	hasFont := false
+	if stack.Primary != nil {
+		result = stack.Primary.Metrics()
+		hasFont = true
 	}
-	metrics := font.Primary.Metrics()
-	if font.Fallback != nil {
-		fallback := font.Fallback.Metrics()
-		if fallback.Ascent > metrics.Ascent {
-			metrics.Ascent = fallback.Ascent
-		}
-		if fallback.Descent > metrics.Descent {
-			metrics.Descent = fallback.Descent
-		}
-		if fallback.LineGap > metrics.LineGap {
-			metrics.LineGap = fallback.LineGap
+	for index := range stack.Fallbacks {
+		if stack.Fallbacks[index] != nil {
+			metrics := stack.Fallbacks[index].Metrics()
+			if !hasFont {
+				result = metrics
+				hasFont = true
+			} else {
+				result = maximumFontMetrics(result, metrics)
+			}
 		}
 	}
-	return metrics
+	return result
 }
 
-type legacyFont struct{ face *fontpkg.Font }
-
-func (font legacyFont) Lookup(r rune) (Glyph, bool) {
-	glyph, ok := font.face.Lookup(r)
-	if !ok {
-		return Glyph{}, false
+func maximumFontMetrics(left, right FontMetrics) FontMetrics {
+	if right.Ascent > left.Ascent {
+		left.Ascent = right.Ascent
 	}
-	return Glyph{Width: glyph.Width, Height: glyph.Height, AdvanceX: glyph.AdvanceX, BearingX: glyph.BearingX, BearingY: glyph.BearingY, Bitmap: glyph.Bitmap}, true
+	if right.Descent > left.Descent {
+		left.Descent = right.Descent
+	}
+	if right.LineGap > left.LineGap {
+		left.LineGap = right.LineGap
+	}
+	return left
 }
-func (font legacyFont) Metrics() FontMetrics {
-	metrics := font.face.Metrics()
-	return FontMetrics{Ascent: metrics.Ascent, Descent: metrics.Descent, LineGap: metrics.LineGap}
+
+// Style is the complete appearance applied to a span.
+type Style struct {
+	Font       Font
+	Foreground display.Color565
+	Background display.Color565
+}
+
+// StyleEntry associates a case-sensitive name with a complete Style.
+type StyleEntry struct {
+	Name  string
+	Style Style
+}
+
+// StyleSet contains the default appearance and named styles used by markup.
+type StyleSet struct {
+	Default Style
+	Entries []StyleEntry
+}
+
+// Lookup linearly searches Entries and returns the first exact name match.
+func (styles StyleSet) Lookup(name string) (Style, bool) {
+	for index := range styles.Entries {
+		if styles.Entries[index].Name == name {
+			return styles.Entries[index].Style, true
+		}
+	}
+	return Style{}, false
 }

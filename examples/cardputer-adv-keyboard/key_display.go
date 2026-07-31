@@ -15,8 +15,8 @@ const (
 )
 
 var (
-	keyFont16 text.Font = text.MGFFont{Font: efont16mgf.Font}
-	keyFont24 text.Font = text.MGFFont{Font: efont24mgf.Font}
+	keyFont16 text.Font = text.NewMGFFont(efont16mgf.Font)
+	keyFont24 text.Font = text.NewMGFFont(efont24mgf.Font)
 )
 
 type keyDisplay struct {

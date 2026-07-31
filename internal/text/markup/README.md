@@ -1,33 +1,40 @@
 # text/markup
 
-`markup`は、小さなタグ付き文字列を`[]text.Span`へ変換します。
+`markup`は小さなタグ付き文字列を`[]text.Span`へ変換します。対応する構文は
+`<style=name>`、`</style>`、`<br>`、`<br/>`、および`<`を表す`<<`です。
+style tagは最大16段までnestでき、終了時には直前のStyleへ戻ります。タグ名は
+lowercase限定で、style名は小文字英字で始まり、その後に小文字英字、数字、`-`を
+使用できます。
 
-対応タグは`<size=12>`、`<size=16>`、`<size=24>`、`<fg=#RRGGBB>`、
-`<bg=#RRGGBB>`、`<br>`、`<br/>`です。styleタグは最大16段までnestでき、
-終了タグは開始タグと正しく対応している必要があります。タグ名はlowercase限定で、
-タグ内の空白には対応しません。`<<`は文字`<`を表します。
-
-`Parse`は結果sliceを確保する便利APIです。`ParseInto`はcallerが渡したbufferを
-再利用し、容量が不足した場合はallocationせずerrorを返します。色は常に
-`#RRGGBB`形式です。
+`Parser.Styles.Default`はタグ外の文字へ使われます。名前付きStyleは
+`StyleSet.Entries`を先頭から完全一致で検索します。`Parse`は結果sliceを確保する
+便利APIです。`ParseInto`はcallerが渡したbufferを再利用し、容量不足時はallocation
+せずerrorを返します。
 
 ```go
-parser := markup.Parser{
-    Fonts: markup.Fonts{
-        Size12: text.MGFFont{Font: shinonome12.Font},
-        Size16: text.MGFFont{Font: efont16.Font},
-        Size24: text.MGFFont{Font: efont24.Font},
+styles := text.StyleSet{
+    Default: text.Style{
+        Font:       text.NewMGFFont(shinonome12.Font),
+        Foreground: display.ColorWhite,
+        Background: display.ColorBlack,
     },
-    Foreground: display.ColorWhite,
-    Background: display.ColorBlack,
+    Entries: []text.StyleEntry{
+        {
+            Name: "main",
+            Style: text.Style{
+                Font:       text.NewMGFFont(efont24.Font),
+                Foreground: display.ColorWhite,
+                Background: display.ColorBlack,
+            },
+        },
+    },
 }
 
-var storage [32]text.Span
-spans, err := parser.ParseInto(
-    storage[:0],
-    "通常<size=24><fg=#ff0000>警告</fg></size>",
+parser := markup.Parser{Styles: styles}
+spans, err := parser.Parse(
+    "<style=main>今日のニュース</style>",
 )
 ```
 
-HTML entity、任意font名、複数attribute、bold、italic、underline、alignment、
-image、link、CSSなどは未対応です。
+inlineのfont、size、color指定、HTML entity、cascade、selector、継承、複数class、
+bold、italic、alignment、image、link、CSSには対応しません。

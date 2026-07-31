@@ -30,9 +30,8 @@ func (b *fakeBackend) WritePixels(data []byte) error {
 }
 func (b *fakeBackend) EndRect() error { b.endCalls++; return b.endErr }
 
-func newFace(glyphs []font.GlyphInfo, bitmap string) *font.Font {
-	f := font.New(font.Metrics{}, glyphs, bitmap)
-	return &f
+func newFace(glyphs []font.GlyphInfo, bitmap string) Font {
+	return spanFace(font.Metrics{}, glyphs, bitmap)
 }
 
 func TestDrawStringEmptyReturnsInitialPen(t *testing.T) {
@@ -107,7 +106,7 @@ func TestDrawStringValidationAndOverflow(t *testing.T) {
 	tests := []struct {
 		name    string
 		backend display.Backend
-		face    *font.Font
+		face    Font
 		value   string
 		x, y    int16
 		scratch []byte
@@ -125,15 +124,6 @@ func TestDrawStringValidationAndOverflow(t *testing.T) {
 				t.Fatal("expected error")
 			}
 		})
-	}
-}
-
-func TestCheckedProductOverflow(t *testing.T) {
-	if _, ok := checkedProduct(int(^uint(0)>>1), 2); ok {
-		t.Fatal("expected scratch size multiplication overflow")
-	}
-	if _, ok := checkedProduct(32767*2, 32767); !ok {
-		t.Fatal("valid maximum glyph size rejected")
 	}
 }
 

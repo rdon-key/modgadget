@@ -11,14 +11,33 @@ import (
 
 // Shinonome 12 does not contain the ASCII used by this demo, so those runs
 // explicitly select Efont 16 while the untagged Japanese runs remain 12px.
-const message = "通常<size=16> ModGadget 日本語16px </size><size=24><fg=#ff4040>大きな24px</fg></size><br><bg=#ffffff><fg=#000000>背景色</fg></bg><size=16> 1 << 2</size>"
+const message = "通常<style=body16> ModGadget 日本語16px </style><style=large-red>大きな24px</style><br><style=inverse>背景色</style><style=body16> 1 << 2</style>"
+
+var messageStyles = [...]text.StyleEntry{
+	{Name: "body16", Style: text.Style{
+		Font:       text.NewMGFFont(efont16mgf.Font),
+		Foreground: display.ColorWhite,
+		Background: display.ColorBlack,
+	}},
+	{Name: "large-red", Style: text.Style{
+		Font:       text.NewMGFFont(efont24mgf.Font),
+		Foreground: display.RGB565(255, 64, 64),
+		Background: display.ColorBlack,
+	}},
+	{Name: "inverse", Style: text.Style{
+		Font:       text.NewMGFFont(shinonomemgf.Font),
+		Foreground: display.ColorBlack,
+		Background: display.ColorWhite,
+	}},
+}
 
 var messageParser = markup.Parser{
-	Fonts: markup.Fonts{
-		Size12: text.MGFFont{Font: shinonomemgf.Font},
-		Size16: text.MGFFont{Font: efont16mgf.Font},
-		Size24: text.MGFFont{Font: efont24mgf.Font},
+	Styles: text.StyleSet{
+		Default: text.Style{
+			Font:       text.NewMGFFont(shinonomemgf.Font),
+			Foreground: display.ColorWhite,
+			Background: display.ColorBlack,
+		},
+		Entries: messageStyles[:],
 	},
-	Foreground: display.ColorWhite,
-	Background: display.ColorBlack,
 }

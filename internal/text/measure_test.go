@@ -54,7 +54,7 @@ func TestMeasureStringErrors(t *testing.T) {
 	oneByte := "\x00"
 	tests := []struct {
 		name  string
-		face  *font.Font
+		face  Font
 		value string
 		rune  string
 	}{
@@ -108,7 +108,7 @@ func TestMeasureStringMatchesDrawString(t *testing.T) {
 	}
 }
 
-func measurementFace() *font.Font {
+func measurementFace() Font {
 	return newFace([]font.GlyphInfo{
 		{Rune: ' ', AdvanceX: 3},
 		{Rune: 'A', Width: 3, Height: 5, AdvanceX: 4, BearingX: 1, BearingY: 4},

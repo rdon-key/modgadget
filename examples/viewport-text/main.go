@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/rdon-key/modgadget/internal/display"
-	"github.com/rdon-key/modgadget/internal/fontdata/spleen8x16"
+	"github.com/rdon-key/modgadget/internal/fontdata/mgf/spleen8x16"
 	"github.com/rdon-key/modgadget/internal/st7789"
 	textdraw "github.com/rdon-key/modgadget/internal/text"
 )
@@ -97,10 +97,10 @@ func drawViewportDemo(backend display.Backend) error {
 	}
 
 	layout, err := textdraw.NewTextLayout([]textdraw.Span{
-		{Face: &spleen8x16.Font, Value: "View", Foreground: display.ColorWhite, Background: display.ColorBlack},
-		{Face: &spleen8x16.Font, Value: "port\n", Foreground: display.ColorGreen, Background: display.ColorBlack},
-		{Face: &spleen8x16.Font, Value: "clip", Foreground: display.RGB565(0, 255, 255), Background: display.ColorBlack},
-		{Face: &spleen8x16.Font, Value: "ping", Foreground: display.RGB565(255, 255, 0), Background: display.ColorBlack},
+		{Font: textdraw.NewMGFFont(spleen8x16.Font), Value: "View", Foreground: display.ColorWhite, Background: display.ColorBlack},
+		{Font: textdraw.NewMGFFont(spleen8x16.Font), Value: "port\n", Foreground: display.ColorGreen, Background: display.ColorBlack},
+		{Font: textdraw.NewMGFFont(spleen8x16.Font), Value: "clip", Foreground: display.RGB565(0, 255, 255), Background: display.ColorBlack},
+		{Font: textdraw.NewMGFFont(spleen8x16.Font), Value: "ping", Foreground: display.RGB565(255, 255, 0), Background: display.ColorBlack},
 	})
 	if err != nil {
 		return fmt.Errorf("build viewport text layout: %w", err)

@@ -22,7 +22,7 @@ func TestMeasureLinesEmpty(t *testing.T) {
 func TestMeasureLinesPlacesAndUnionsLines(t *testing.T) {
 	faceA := spanFace(font.Metrics{Ascent: 3, Descent: 1, LineGap: 1}, []font.GlyphInfo{{Rune: 'a', Width: 2, Height: 2, AdvanceX: 4, BearingY: 1}}, "\x00\x00")
 	faceB := spanFace(font.Metrics{Ascent: 2, Descent: 1}, []font.GlyphInfo{{Rune: 'b', Width: 1, Height: 2, AdvanceX: 2, BearingX: -1, BearingY: 2}}, "\x00\x00")
-	lines := []Line{{Spans: []Span{{Face: faceA, Value: "a"}}}, {Spans: []Span{{Face: faceB, Value: "b"}}}}
+	lines := []Line{{Spans: []Span{{Font: faceA, Value: "a"}}}, {Spans: []Span{{Font: faceB, Value: "b"}}}}
 	want := BlockMeasurement{Bounds: Bounds{MinX: -1, MinY: -1, MaxX: 2, MaxY: 5}, HasInk: true, MaxAdvanceX: 4, AdvanceY: 8}
 	got, err := MeasureLines(lines)
 	if err != nil || got != want {
@@ -33,7 +33,7 @@ func TestMeasureLinesPlacesAndUnionsLines(t *testing.T) {
 func TestMeasureLinesFontEmptyAndWhitespaceLines(t *testing.T) {
 	empty := spanFace(font.Metrics{Ascent: 4, Descent: 1}, nil, "")
 	space := spanFace(font.Metrics{Ascent: 2, Descent: 1, LineGap: 1}, []font.GlyphInfo{{Rune: ' ', AdvanceX: 3}}, "")
-	got, err := MeasureLines([]Line{{Spans: []Span{{Face: empty, Value: ""}}}, {}, {Spans: []Span{{Face: space, Value: "  "}}}})
+	got, err := MeasureLines([]Line{{Spans: []Span{{Font: empty, Value: ""}}}, {}, {Spans: []Span{{Font: space, Value: "  "}}}})
 	want := BlockMeasurement{MaxAdvanceX: 6, AdvanceY: 9}
 	if err != nil || got != want {
 		t.Fatalf("block=%+v want %+v err=%v", got, want, err)
@@ -43,7 +43,7 @@ func TestMeasureLinesFontEmptyAndWhitespaceLines(t *testing.T) {
 func TestMeasureLinesMaximumNegativeAdvance(t *testing.T) {
 	faceA := spanFace(font.Metrics{}, []font.GlyphInfo{{Rune: 'a', AdvanceX: -5}}, "")
 	faceB := spanFace(font.Metrics{}, []font.GlyphInfo{{Rune: 'b', AdvanceX: -3}}, "")
-	got, err := MeasureLines([]Line{{Spans: []Span{{Face: faceA, Value: "a"}}}, {Spans: []Span{{Face: faceB, Value: "b"}}}})
+	got, err := MeasureLines([]Line{{Spans: []Span{{Font: faceA, Value: "a"}}}, {Spans: []Span{{Font: faceB, Value: "b"}}}})
 	if err != nil || got.MaxAdvanceX != -3 {
 		t.Fatalf("block=%+v err=%v", got, err)
 	}
@@ -51,7 +51,7 @@ func TestMeasureLinesMaximumNegativeAdvance(t *testing.T) {
 
 func TestMeasureLinesAllowsNegativeAdvanceYAndOverlappingInk(t *testing.T) {
 	face := spanFace(font.Metrics{Ascent: -2, Descent: -1}, []font.GlyphInfo{{Rune: 'a', Width: 1, Height: 4, AdvanceX: 1, BearingY: 2}}, strings.Repeat("\x00", 4))
-	got, err := MeasureLines([]Line{{Spans: []Span{{Face: face, Value: "a"}}}, {Spans: []Span{{Face: face, Value: "a"}}}})
+	got, err := MeasureLines([]Line{{Spans: []Span{{Font: face, Value: "a"}}}, {Spans: []Span{{Font: face, Value: "a"}}}})
 	want := BlockMeasurement{Bounds: Bounds{MinX: 0, MinY: -5, MaxX: 1, MaxY: 2}, HasInk: true, MaxAdvanceX: 1, AdvanceY: -6}
 	if err != nil || got != want {
 		t.Fatalf("block=%+v want %+v err=%v", got, want, err)
@@ -69,9 +69,9 @@ func TestMeasureLinesOverflow(t *testing.T) {
 		lines []Line
 		index string
 	}{
-		{"positive bounds shift", []Line{{Spans: []Span{{Face: positiveBaseline, Value: ""}}}, {Spans: []Span{{Face: positiveInk, Value: "p"}}}}, "line 1"},
-		{"negative bounds shift", []Line{{Spans: []Span{{Face: negativeBaseline, Value: ""}}}, {Spans: []Span{{Face: negativeInk, Value: "n"}}}}, "line 1"},
-		{"cumulative baseline", []Line{{Spans: []Span{{Face: positiveBaseline, Value: ""}}}, {Spans: []Span{{Face: advanceOne, Value: ""}}}}, "line 1"},
+		{"positive bounds shift", []Line{{Spans: []Span{{Font: positiveBaseline, Value: ""}}}, {Spans: []Span{{Font: positiveInk, Value: "p"}}}}, "line 1"},
+		{"negative bounds shift", []Line{{Spans: []Span{{Font: negativeBaseline, Value: ""}}}, {Spans: []Span{{Font: negativeInk, Value: "n"}}}}, "line 1"},
+		{"cumulative baseline", []Line{{Spans: []Span{{Font: positiveBaseline, Value: ""}}}, {Spans: []Span{{Font: advanceOne, Value: ""}}}}, "line 1"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -92,12 +92,12 @@ func TestMeasureLinesPartialErrorsPreserveContext(t *testing.T) {
 		text string
 	}{
 		{"nil face", Span{}, "span 0"},
-		{"invalid UTF-8", Span{Face: second, Value: string([]byte{0xff})}, "span 0"},
-		{"missing after glyph", Span{Face: second, Value: "bz"}, "U+007A"},
+		{"invalid UTF-8", Span{Font: second, Value: string([]byte{0xff})}, "span 0"},
+		{"missing after glyph", Span{Font: second, Value: "bz"}, "U+007A"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := MeasureLines([]Line{{Spans: []Span{{Face: first, Value: "a"}}}, {Spans: []Span{tt.span}}})
+			got, err := MeasureLines([]Line{{Spans: []Span{{Font: first, Value: "a"}}}, {Spans: []Span{tt.span}}})
 			if err == nil || !strings.Contains(err.Error(), "line 1") || !strings.Contains(err.Error(), tt.text) {
 				t.Fatalf("block=%+v err=%v", got, err)
 			}
@@ -120,8 +120,8 @@ func TestDrawLinesEmpty(t *testing.T) {
 func TestDrawLinesResetsPenMovesBaselineAndReusesScratch(t *testing.T) {
 	face := spanFace(font.Metrics{Ascent: 2, Descent: 1}, []font.GlyphInfo{{Rune: 'a', Width: 2, Height: 1, AdvanceX: 3, BearingY: 1}}, "\x80")
 	lines := []Line{
-		{Spans: []Span{{Face: face, Value: "a", Foreground: 0x1234, Background: 0xabcd}}},
-		{Spans: []Span{{Face: face, Value: "a", Foreground: 0x5678, Background: 0x9abc}}},
+		{Spans: []Span{{Font: face, Value: "a", Foreground: 0x1234, Background: 0xabcd}}},
+		{Spans: []Span{{Font: face, Value: "a", Foreground: 0x5678, Background: 0x9abc}}},
 	}
 	backend := &fakeBackend{}
 	scratch := make([]byte, 4)
@@ -141,7 +141,7 @@ func TestDrawLinesResetsPenMovesBaselineAndReusesScratch(t *testing.T) {
 func TestDrawLinesEmptyFontLineAndEmptyLine(t *testing.T) {
 	face := spanFace(font.Metrics{Ascent: 4, Descent: 1}, nil, "")
 	backend := &fakeBackend{}
-	baseline, err := DrawLines(backend, []Line{{Spans: []Span{{Face: face, Value: ""}}}, {}}, 0, 2, nil)
+	baseline, err := DrawLines(backend, []Line{{Spans: []Span{{Font: face, Value: ""}}}, {}}, 0, 2, nil)
 	if err != nil || baseline != 7 || backend.beginCalls != 0 {
 		t.Fatalf("baseline=%d calls=%d err=%v", baseline, backend.beginCalls, err)
 	}
@@ -162,7 +162,7 @@ func TestDrawLinesPartialErrors(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			baseline, err := DrawLines(tt.backend, []Line{{Spans: []Span{{Face: empty, Value: ""}}}, {Spans: []Span{{Face: drawn, Value: tt.value}}}}, 0, 5, make([]byte, 2))
+			baseline, err := DrawLines(tt.backend, []Line{{Spans: []Span{{Font: empty, Value: ""}}}, {Spans: []Span{{Font: drawn, Value: tt.value}}}}, 0, 5, make([]byte, 2))
 			if baseline != 8 || err == nil || !strings.Contains(err.Error(), "line 1") || !strings.Contains(err.Error(), tt.text) {
 				t.Fatalf("baseline=%d err=%v", baseline, err)
 			}
@@ -174,8 +174,8 @@ func TestDrawLinesDrawsEarlierSpansBeforeLaterSpanError(t *testing.T) {
 	good := spanFace(font.Metrics{Ascent: 2, Descent: 1}, []font.GlyphInfo{{Rune: 'a', Width: 1, Height: 1, AdvanceX: 1}}, "\x80")
 	maxMetrics := spanFace(font.Metrics{Ascent: math.MaxInt16}, []font.GlyphInfo{{Rune: 'a', Width: 1, Height: 1, AdvanceX: 1}}, "\x80")
 	overflowMetrics := spanFace(font.Metrics{Descent: 1}, []font.GlyphInfo{{Rune: 'b', Width: 1, Height: 1, AdvanceX: 1}}, "\x80")
-	first := func(face *font.Font) Span {
-		return Span{Face: face, Value: "a", Foreground: 0x1234}
+	first := func(face Font) Span {
+		return Span{Font: face, Value: "a", Foreground: 0x1234}
 	}
 	tests := []struct {
 		name       string
@@ -184,9 +184,9 @@ func TestDrawLinesDrawsEarlierSpansBeforeLaterSpanError(t *testing.T) {
 		errorTexts []string
 	}{
 		{"nil face", []Span{first(good), {}}, 1, []string{"line 0", "span 1"}},
-		{"invalid UTF-8", []Span{first(good), {Face: good, Value: string([]byte{0xff})}}, 1, []string{"line 0", "span 1"}},
-		{"metrics overflow", []Span{first(maxMetrics), {Face: overflowMetrics, Value: "b"}}, 1, []string{"line 0", "span 1"}},
-		{"missing glyph", []Span{first(good), {Face: good, Value: "az"}}, 2, []string{"line 0", "U+007A"}},
+		{"invalid UTF-8", []Span{first(good), {Font: good, Value: string([]byte{0xff})}}, 1, []string{"line 0", "span 1"}},
+		{"metrics overflow", []Span{first(maxMetrics), {Font: overflowMetrics, Value: "b"}}, 1, []string{"line 0", "span 1"}},
+		{"missing glyph", []Span{first(good), {Font: good, Value: "az"}}, 2, []string{"line 0", "U+007A"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -215,7 +215,7 @@ func TestDrawLinesDrawsEarlierSpansBeforeLaterSpanError(t *testing.T) {
 
 func TestDrawLinesBaselineOverflow(t *testing.T) {
 	face := spanFace(font.Metrics{Descent: 1}, nil, "")
-	baseline, err := DrawLines(&fakeBackend{}, []Line{{Spans: []Span{{Face: face, Value: ""}}}}, 0, math.MaxInt16, nil)
+	baseline, err := DrawLines(&fakeBackend{}, []Line{{Spans: []Span{{Font: face, Value: ""}}}}, 0, math.MaxInt16, nil)
 	if baseline != math.MaxInt16 || err == nil || !strings.Contains(err.Error(), "line 0") {
 		t.Fatalf("baseline=%d err=%v", baseline, err)
 	}
@@ -223,7 +223,7 @@ func TestDrawLinesBaselineOverflow(t *testing.T) {
 
 func TestBlockMeasurementAndDrawingAgree(t *testing.T) {
 	face := spanFace(font.Metrics{Ascent: 2, Descent: 1}, []font.GlyphInfo{{Rune: 'a', Width: 1, Height: 1, AdvanceX: 2, BearingY: 1}}, "\x80")
-	lines := []Line{{Spans: []Span{{Face: face, Value: "a"}}}, {Spans: []Span{{Face: face, Value: "a"}}}}
+	lines := []Line{{Spans: []Span{{Font: face, Value: "a"}}}, {Spans: []Span{{Font: face, Value: "a"}}}}
 	measurement, err := MeasureLines(lines)
 	if err != nil {
 		t.Fatal(err)

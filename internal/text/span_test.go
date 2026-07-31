@@ -29,10 +29,10 @@ func TestMeasureSpansAcrossFaces(t *testing.T) {
 		{Rune: 'C', BitmapOffset: 3, Width: 1, Height: 2, AdvanceX: -2, BearingX: 1, BearingY: -1},
 	}, strings.Repeat("\x00", 5))
 	spans := []Span{
-		{Face: faceA, Value: "A"},
-		{Face: faceA, Value: ""},
-		{Face: faceA, Value: " "},
-		{Face: faceB, Value: "BC"},
+		{Font: faceA, Value: "A"},
+		{Font: faceA, Value: ""},
+		{Font: faceA, Value: " "},
+		{Font: faceB, Value: "BC"},
 	}
 	want := Measurement{Advance: 6, Bounds: Bounds{MinX: 1, MinY: -3, MaxX: 10, MaxY: 3}, HasInk: true}
 	got, err := MeasureSpans(spans)
@@ -43,7 +43,7 @@ func TestMeasureSpansAcrossFaces(t *testing.T) {
 
 func TestMeasureSpansWhitespaceOnly(t *testing.T) {
 	face := spanFace(font.Metrics{}, []font.GlyphInfo{{Rune: ' ', AdvanceX: 3}}, "")
-	got, err := MeasureSpans([]Span{{Face: face, Value: "  "}, {Face: face, Value: ""}})
+	got, err := MeasureSpans([]Span{{Font: face, Value: "  "}, {Font: face, Value: ""}})
 	if err != nil || got.Advance != 6 || got.HasInk || got.Bounds != (Bounds{}) {
 		t.Fatalf("measurement=%+v err=%v", got, err)
 	}
@@ -58,10 +58,10 @@ func TestMeasureSpansPartialErrors(t *testing.T) {
 		want  int16
 		text  string
 	}{
-		{"nil face", []Span{{Face: first, Value: "a"}, {Value: ""}}, 3, "span 1"},
-		{"missing glyph", []Span{{Face: first, Value: "a"}, {Face: second, Value: "bz"}}, 5, "U+007A"},
-		{"invalid UTF-8", []Span{{Face: first, Value: "a"}, {Face: second, Value: string([]byte{0xff})}}, 3, "span 1"},
-		{"span boundary advance overflow", []Span{{Face: spanFace(font.Metrics{}, []font.GlyphInfo{{Rune: 'x', AdvanceX: math.MaxInt16}}, ""), Value: "x"}, {Face: spanFace(font.Metrics{}, []font.GlyphInfo{{Rune: 'y', AdvanceX: 1}}, ""), Value: "y"}}, math.MaxInt16, "U+0079"},
+		{"nil face", []Span{{Font: first, Value: "a"}, {Value: ""}}, 3, "span 1"},
+		{"missing glyph", []Span{{Font: first, Value: "a"}, {Font: second, Value: "bz"}}, 5, "U+007A"},
+		{"invalid UTF-8", []Span{{Font: first, Value: "a"}, {Font: second, Value: string([]byte{0xff})}}, 3, "span 1"},
+		{"span boundary advance overflow", []Span{{Font: spanFace(font.Metrics{}, []font.GlyphInfo{{Rune: 'x', AdvanceX: math.MaxInt16}}, ""), Value: "x"}, {Font: spanFace(font.Metrics{}, []font.GlyphInfo{{Rune: 'y', AdvanceX: 1}}, ""), Value: "y"}}, math.MaxInt16, "U+0079"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -91,8 +91,8 @@ func TestDrawSpansSwitchesFacesAndColorsAndReusesScratch(t *testing.T) {
 	faceA := spanFace(font.Metrics{}, []font.GlyphInfo{{Rune: 'a', Width: 2, Height: 1, AdvanceX: 3, BearingY: 1}}, "\x80")
 	faceB := spanFace(font.Metrics{}, []font.GlyphInfo{{Rune: 'b', Width: 2, Height: 1, AdvanceX: 4, BearingX: 1, BearingY: -1}}, "\x80")
 	spans := []Span{
-		{Face: faceA, Value: "a", Foreground: 0x1234, Background: 0xabcd},
-		{Face: faceB, Value: "b", Foreground: 0x5678, Background: 0x9abc},
+		{Font: faceA, Value: "a", Foreground: 0x1234, Background: 0xabcd},
+		{Font: faceB, Value: "b", Foreground: 0x5678, Background: 0x9abc},
 	}
 	backend := &fakeBackend{}
 	scratch := make([]byte, 4)
@@ -122,24 +122,24 @@ func TestDrawSpansWhitespaceAndPartialErrors(t *testing.T) {
 	space := spanFace(font.Metrics{}, []font.GlyphInfo{{Rune: ' ', AdvanceX: 3}}, "")
 	drawn := spanFace(font.Metrics{}, []font.GlyphInfo{{Rune: 'a', Width: 1, Height: 1, AdvanceX: 2}}, "\x80")
 	backend := &fakeBackend{}
-	pen, err := DrawSpans(backend, []Span{{Face: space, Value: " "}, {Face: drawn, Value: "a"}}, 5, 0, make([]byte, 2))
+	pen, err := DrawSpans(backend, []Span{{Font: space, Value: " "}, {Font: drawn, Value: "a"}}, 5, 0, make([]byte, 2))
 	if err != nil || pen != 10 || len(backend.rects) != 1 || backend.rects[0].X != 8 {
 		t.Fatalf("pen=%d rects=%v err=%v", pen, backend.rects, err)
 	}
 
 	sentinel := errors.New("backend failure")
 	backend = &fakeBackend{writeErr: sentinel}
-	pen, err = DrawSpans(backend, []Span{{Face: space, Value: " "}, {Face: drawn, Value: "a"}}, 5, 0, make([]byte, 2))
+	pen, err = DrawSpans(backend, []Span{{Font: space, Value: " "}, {Font: drawn, Value: "a"}}, 5, 0, make([]byte, 2))
 	if pen != 8 || !errors.Is(err, sentinel) {
 		t.Fatalf("pen=%d err=%v", pen, err)
 	}
 
-	pen, err = DrawSpans(&fakeBackend{}, []Span{{Face: space, Value: " "}, {Face: drawn, Value: "az"}}, 5, 0, make([]byte, 2))
+	pen, err = DrawSpans(&fakeBackend{}, []Span{{Font: space, Value: " "}, {Font: drawn, Value: "az"}}, 5, 0, make([]byte, 2))
 	if pen != 10 || err == nil || !strings.Contains(err.Error(), "U+007A") {
 		t.Fatalf("pen=%d err=%v", pen, err)
 	}
 
-	pen, err = DrawSpans(&fakeBackend{}, []Span{{Face: space, Value: " "}, {Value: ""}}, 5, 0, nil)
+	pen, err = DrawSpans(&fakeBackend{}, []Span{{Font: space, Value: " "}, {Value: ""}}, 5, 0, nil)
 	if pen != 8 || err == nil || !strings.Contains(err.Error(), "span 1") {
 		t.Fatalf("nil face: pen=%d err=%v", pen, err)
 	}
@@ -151,8 +151,8 @@ func TestDrawSpansOverflow(t *testing.T) {
 		spans []Span
 		pen   int16
 	}{
-		{"coordinate", []Span{{Face: spanFace(font.Metrics{}, []font.GlyphInfo{{Rune: 'a', Width: 1, Height: 1, BearingX: 1}}, "\x80"), Value: "a"}}, math.MaxInt16},
-		{"advance", []Span{{Face: spanFace(font.Metrics{}, []font.GlyphInfo{{Rune: 'a', AdvanceX: 1}}, ""), Value: "a"}}, math.MaxInt16},
+		{"coordinate", []Span{{Font: spanFace(font.Metrics{}, []font.GlyphInfo{{Rune: 'a', Width: 1, Height: 1, BearingX: 1}}, "\x80"), Value: "a"}}, math.MaxInt16},
+		{"advance", []Span{{Font: spanFace(font.Metrics{}, []font.GlyphInfo{{Rune: 'a', AdvanceX: 1}}, ""), Value: "a"}}, math.MaxInt16},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -166,7 +166,7 @@ func TestDrawSpansOverflow(t *testing.T) {
 
 func TestSpanMeasurementAndDrawingAgree(t *testing.T) {
 	face := measurementFace()
-	spans := []Span{{Face: face, Value: "A "}, {Face: face, Value: "B"}, {Face: face, Value: " C"}}
+	spans := []Span{{Font: face, Value: "A "}, {Font: face, Value: "B"}, {Font: face, Value: " C"}}
 	measurement, err := MeasureSpans(spans)
 	if err != nil {
 		t.Fatal(err)
@@ -183,7 +183,7 @@ func TestSpanMeasurementAndDrawingAgree(t *testing.T) {
 
 func TestSingleSpanAPIsAgree(t *testing.T) {
 	face := measurementFace()
-	span := Span{Face: face, Value: "A", Foreground: 0x1234, Background: 0xabcd}
+	span := Span{Font: face, Value: "A", Foreground: 0x1234, Background: 0xabcd}
 	stringMeasurement, err := MeasureString(face, span.Value)
 	if err != nil {
 		t.Fatal(err)
@@ -203,9 +203,24 @@ func TestSingleSpanAPIsAgree(t *testing.T) {
 	}
 }
 
-func spanFace(metrics font.Metrics, glyphs []font.GlyphInfo, bitmap string) *font.Font {
+type fixtureFont struct{ source *font.Font }
+
+func (adapter fixtureFont) Lookup(r rune) (Glyph, bool) {
+	glyph, ok := adapter.source.Lookup(r)
+	if !ok {
+		return Glyph{}, false
+	}
+	return Glyph{Width: glyph.Width, Height: glyph.Height, AdvanceX: glyph.AdvanceX, BearingX: glyph.BearingX, BearingY: glyph.BearingY, Bitmap: glyph.Bitmap}, true
+}
+
+func (adapter fixtureFont) Metrics() FontMetrics {
+	metrics := adapter.source.Metrics()
+	return FontMetrics{Ascent: metrics.Ascent, Descent: metrics.Descent, LineGap: metrics.LineGap}
+}
+
+func spanFace(metrics font.Metrics, glyphs []font.GlyphInfo, bitmap string) Font {
 	face := font.New(metrics, glyphs, bitmap)
-	return &face
+	return fixtureFont{source: &face}
 }
 
 func unionRects(rects []display.Rect) Bounds {

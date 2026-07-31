@@ -20,13 +20,18 @@ func (font *testFont) Lookup(r rune) (text.Glyph, bool) {
 func (font *testFont) Metrics() text.FontMetrics { return font.metrics }
 
 func testParser() (Parser, *testFont, *testFont, *testFont) {
-	font12 := &testFont{id: 12, metrics: text.FontMetrics{Ascent: 10, Descent: 2}}
-	font16 := &testFont{id: 16, metrics: text.FontMetrics{Ascent: 14, Descent: 2}}
-	font24 := &testFont{id: 24, metrics: text.FontMetrics{Ascent: 22, Descent: 2}}
-	return Parser{
-		Fonts:      Fonts{Size12: font12, Size16: font16, Size24: font24},
-		Foreground: display.ColorWhite, Background: display.ColorBlack,
-	}, font12, font16, font24
+	base := &testFont{id: 12, metrics: text.FontMetrics{Ascent: 10, Descent: 2}}
+	medium := &testFont{id: 16, metrics: text.FontMetrics{Ascent: 14, Descent: 2}}
+	large := &testFont{id: 24, metrics: text.FontMetrics{Ascent: 22, Descent: 2}}
+	return Parser{Styles: text.StyleSet{
+		Default: text.Style{Font: base, Foreground: display.ColorWhite, Background: display.ColorBlack},
+		Entries: []text.StyleEntry{
+			{Name: "medium", Style: text.Style{Font: medium, Foreground: display.ColorGreen, Background: display.ColorBlack}},
+			{Name: "large-red", Style: text.Style{Font: large, Foreground: display.ColorRed, Background: display.ColorBlack}},
+			{Name: "inverse", Style: text.Style{Font: base, Foreground: display.ColorBlack, Background: display.ColorWhite}},
+			{Name: "nil-font", Style: text.Style{Foreground: display.ColorWhite}},
+		},
+	}}, base, medium, large
 }
 
 func fontIdentifier(t *testing.T, font text.Font) int16 {
@@ -38,7 +43,7 @@ func fontIdentifier(t *testing.T, font text.Font) int16 {
 	return glyph.BearingX
 }
 
-func TestParsePlainText(t *testing.T) {
+func TestParseDefaultStyle(t *testing.T) {
 	parser, _, _, _ := testParser()
 	spans, err := parser.Parse("Hello 日本語")
 	if err != nil {
@@ -47,29 +52,33 @@ func TestParsePlainText(t *testing.T) {
 	if len(spans) != 1 || spans[0].Value != "Hello 日本語" || fontIdentifier(t, spans[0].Font) != 12 || spans[0].Foreground != display.ColorWhite || spans[0].Background != display.ColorBlack {
 		t.Fatalf("spans = %+v", spans)
 	}
+	parser.Styles.Default.Font = nil
+	if spans, err := parser.Parse("x"); err == nil || spans != nil {
+		t.Fatalf("nil default font spans=%+v err=%v", spans, err)
+	}
 }
 
-func TestParseSizes(t *testing.T) {
+func TestParseStyleSwitchAndRestore(t *testing.T) {
 	parser, _, _, _ := testParser()
-	spans, err := parser.Parse("a<size=16>b</size>c<size=24>d</size>e")
+	spans, err := parser.Parse("a<style=medium>b</style>c")
 	if err != nil {
 		t.Fatal(err)
 	}
-	wantValues := []string{"a", "b", "c", "d", "e"}
-	wantFonts := []int16{12, 16, 12, 24, 12}
-	if len(spans) != len(wantValues) {
-		t.Fatalf("len = %d", len(spans))
-	}
+	wantFonts := []int16{12, 16, 12}
+	wantValues := []string{"a", "b", "c"}
 	for index := range spans {
 		if spans[index].Value != wantValues[index] || fontIdentifier(t, spans[index].Font) != wantFonts[index] {
 			t.Fatalf("span %d = %+v", index, spans[index])
 		}
 	}
+	if spans[1].Foreground != display.ColorGreen || spans[1].Background != display.ColorBlack {
+		t.Fatalf("medium style colors = %#04x/%#04x", spans[1].Foreground, spans[1].Background)
+	}
 }
 
 func TestParseNestedStyles(t *testing.T) {
 	parser, _, _, _ := testParser()
-	spans, err := parser.Parse("<size=24>A<fg=#ff0000>B<bg=#ffffff>C</bg>D</fg>E</size>")
+	spans, err := parser.Parse("<style=medium>A<style=large-red>B<style=inverse>C</style>D</style>E</style>F")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -79,11 +88,12 @@ func TestParseNestedStyles(t *testing.T) {
 		foreground display.Color565
 		background display.Color565
 	}{
-		{"A", 24, display.ColorWhite, display.ColorBlack},
-		{"B", 24, display.RGB565(255, 0, 0), display.ColorBlack},
-		{"C", 24, display.RGB565(255, 0, 0), display.ColorWhite},
-		{"D", 24, display.RGB565(255, 0, 0), display.ColorBlack},
-		{"E", 24, display.ColorWhite, display.ColorBlack},
+		{"A", 16, display.ColorGreen, display.ColorBlack},
+		{"B", 24, display.ColorRed, display.ColorBlack},
+		{"C", 12, display.ColorBlack, display.ColorWhite},
+		{"D", 24, display.ColorRed, display.ColorBlack},
+		{"E", 16, display.ColorGreen, display.ColorBlack},
+		{"F", 12, display.ColorWhite, display.ColorBlack},
 	}
 	if len(spans) != len(want) {
 		t.Fatalf("len = %d", len(spans))
@@ -95,60 +105,42 @@ func TestParseNestedStyles(t *testing.T) {
 	}
 }
 
-func TestParseColors(t *testing.T) {
-	parser, _, _, _ := testParser()
-	tests := []struct {
-		hex  string
-		want display.Color565
-	}{
-		{"000000", display.RGB565(0x00, 0x00, 0x00)},
-		{"ffffff", display.RGB565(0xff, 0xff, 0xff)},
-		{"ff0000", display.RGB565(0xff, 0x00, 0x00)},
-		{"00ff00", display.RGB565(0x00, 0xff, 0x00)},
-		{"0000ff", display.RGB565(0x00, 0x00, 0xff)},
-		{"123456", display.RGB565(0x12, 0x34, 0x56)},
-		{"abcdef", display.RGB565(0xab, 0xcd, 0xef)},
-		{"ABCDEF", display.RGB565(0xab, 0xcd, 0xef)},
+func TestStyleNames(t *testing.T) {
+	parser, _, medium, _ := testParser()
+	parser.Styles.Entries = []text.StyleEntry{}
+	for _, name := range []string{"main", "date", "sub1", "ja-main"} {
+		parser.Styles.Entries = append(parser.Styles.Entries, text.StyleEntry{Name: name, Style: text.Style{Font: medium}})
+		if _, err := parser.Parse("<style=" + name + ">x</style>"); err != nil {
+			t.Errorf("valid name %q: %v", name, err)
+		}
 	}
-	for _, test := range tests {
-		t.Run(test.hex, func(t *testing.T) {
-			spans, err := parser.Parse("<fg=#" + test.hex + ">x</fg>")
-			if err != nil {
-				t.Fatal(err)
-			}
-			if len(spans) != 1 || spans[0].Foreground != test.want {
-				t.Fatalf("spans = %+v", spans)
-			}
-		})
+	for _, name := range []string{"", "Main", "main_style", "-main", "main.class", "日本語", "main style"} {
+		if _, err := parser.Parse("<style=" + name + ">x</style>"); err == nil {
+			t.Errorf("invalid name %q succeeded", name)
+		}
 	}
 }
 
-func TestParseBreakEscapeNewlineAndEmptyTags(t *testing.T) {
+func TestParseBreakEscapeNewlineAndEmptyStyle(t *testing.T) {
 	parser, _, _, _ := testParser()
 	spans, err := parser.Parse("a<br>b<br/>c")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got := spanValues(spans); got != "a|\n|b|\n|c" {
-		t.Fatalf("values = %q", got)
+	if err != nil || spanValues(spans) != "a|\n|b|\n|c" {
+		t.Fatalf("break spans=%+v err=%v", spans, err)
 	}
 	spans, err = parser.Parse("1 << 2")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got := concatenateValues(spans); got != "1 < 2" {
-		t.Fatalf("escaped = %q", got)
+	if err != nil || concatenateValues(spans) != "1 < 2" {
+		t.Fatalf("escape spans=%+v err=%v", spans, err)
 	}
 	spans, err = parser.Parse("a\nb")
 	if err != nil || len(spans) != 1 || spans[0].Value != "a\nb" {
-		t.Fatalf("raw newline spans=%+v err=%v", spans, err)
+		t.Fatalf("newline spans=%+v err=%v", spans, err)
 	}
-	spans, err = parser.Parse("a<size=16></size>b")
+	spans, err = parser.Parse("a<style=medium></style>b")
 	if err != nil || len(spans) != 2 || spans[0].Value != "a" || spans[1].Value != "b" {
-		t.Fatalf("empty tag spans=%+v err=%v", spans, err)
+		t.Fatalf("empty style spans=%+v err=%v", spans, err)
 	}
-	spans, err = parser.Parse("a<size=16>b<br>c</size>d")
-	if err != nil || len(spans) != 5 || spans[2].Value != "\n" || fontIdentifier(t, spans[2].Font) != 16 {
+	spans, err = parser.Parse("<style=medium>a<br>b</style>")
+	if err != nil || len(spans) != 3 || spans[1].Value != "\n" || fontIdentifier(t, spans[1].Font) != 16 {
 		t.Fatalf("styled break spans=%+v err=%v", spans, err)
 	}
 }
@@ -165,29 +157,24 @@ func TestParseUTF8(t *testing.T) {
 	}
 }
 
-func TestParseErrors(t *testing.T) {
+func TestParseErrorsAndOffsets(t *testing.T) {
 	parser, _, _, _ := testParser()
 	tests := []struct {
 		name   string
 		value  string
 		offset int
 	}{
-		{"unknown", "a<unknown>b", 1},
-		{"unsupported size", "<size=13>x</size>", 0},
-		{"quoted size", "<size=\"16\">x</size>", 0},
-		{"malformed color", "<fg=#12xx56>x</fg>", 0},
-		{"short color", "<fg=#fff>x</fg>", 0},
-		{"named color", "<fg=red>x</fg>", 0},
-		{"uppercase", "<SIZE=16>x</SIZE>", 0},
-		{"tag whitespace", "<size = 16>x</size>", 0},
-		{"break whitespace", "<br />", 0},
-		{"closing break", "</br>", 0},
-		{"unterminated", "a<size=16", 1},
-		{"unexpected close", "</size>", 0},
-		{"mismatch", "<size=16><fg=#ff0000>x</size></fg>", 22},
-		{"wrong close", "<fg=#ff0000>x</bg>", 13},
-		{"unclosed size", "<size=16>x", 10},
-		{"unclosed fg", "<fg=#ff0000>x", 13},
+		{"unknown tag", "a<unknown>b", 1},
+		{"unknown style", "<style=missing>x</style>", 0},
+		{"nil selected font", "<style=nil-font>x</style>", 0},
+		{"unterminated", "a<style=medium", 1},
+		{"unexpected close", "</style>", 0},
+		{"unclosed", "<style=medium>x", len("<style=medium>x")},
+		{"old size 12", "<size=12>x</size>", 0},
+		{"old size 16", "<size=16>x</size>", 0},
+		{"old size 24", "<size=24>x</size>", 0},
+		{"old foreground", "<fg=#ff0000>x</fg>", 0},
+		{"old background", "<bg=#ffffff>x</bg>", 0},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -197,48 +184,32 @@ func TestParseErrors(t *testing.T) {
 			}
 			var syntax *SyntaxError
 			if !errors.As(err, &syntax) || syntax.Offset != test.offset {
-				t.Fatalf("error=%v offset=%v", err, syntax)
+				t.Fatalf("error=%v syntax=%+v", err, syntax)
 			}
 		})
 	}
-	deep := strings.Repeat("<size=12>", 17) + "x" + strings.Repeat("</size>", 17)
-	if _, err := parser.Parse(deep); err == nil {
+}
+
+func TestNestingDepth(t *testing.T) {
+	parser, _, _, _ := testParser()
+	depth16 := strings.Repeat("<style=medium>", 16) + "x" + strings.Repeat("</style>", 16)
+	if _, err := parser.Parse(depth16); err != nil {
+		t.Fatalf("depth 16: %v", err)
+	}
+	depth17 := strings.Repeat("<style=medium>", 17) + "x" + strings.Repeat("</style>", 17)
+	if _, err := parser.Parse(depth17); err == nil {
 		t.Fatal("depth 17 succeeded")
 	} else {
 		var syntax *SyntaxError
-		if !errors.As(err, &syntax) || syntax.Offset != 16*len("<size=12>") {
+		if !errors.As(err, &syntax) || syntax.Offset != 16*len("<style=medium>") {
 			t.Fatalf("depth error = %v", err)
 		}
 	}
 }
 
-func TestParseFontValidation(t *testing.T) {
-	parser, _, _, _ := testParser()
-	parser.Fonts.Size12 = nil
-	if spans, err := parser.Parse("x"); err == nil || spans != nil {
-		t.Fatalf("nil Size12 spans=%+v err=%v", spans, err)
-	}
-	parser, _, _, _ = testParser()
-	parser.Fonts.Size16 = nil
-	if _, err := parser.Parse("x"); err != nil {
-		t.Fatalf("unused nil Size16: %v", err)
-	}
-	if spans, err := parser.Parse("<size=16>x</size>"); err == nil || spans != nil {
-		t.Fatalf("nil Size16 spans=%+v err=%v", spans, err)
-	}
-	parser, _, _, _ = testParser()
-	parser.Fonts.Size24 = nil
-	if _, err := parser.Parse("x"); err != nil {
-		t.Fatalf("unused nil Size24: %v", err)
-	}
-	if spans, err := parser.Parse("<size=24>x</size>"); err == nil || spans != nil {
-		t.Fatalf("nil Size24 spans=%+v err=%v", spans, err)
-	}
-}
-
 func TestParseInto(t *testing.T) {
 	parser, _, _, _ := testParser()
-	value := "a<size=16>b<fg=#ff0000>c</fg>d</size>e<br>f"
+	value := "a<style=medium>b<style=large-red>c</style>d</style>e<br>f"
 	want, err := parser.Parse(value)
 	if err != nil {
 		t.Fatal(err)
