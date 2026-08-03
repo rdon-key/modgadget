@@ -165,6 +165,300 @@ func TestHorizontalScrollTiming(t *testing.T) {
 	}
 }
 
+func TestScrollFromLeftPositionAndFinish(t *testing.T) {
+	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	b := &testBackend{width: 20, height: 10}
+	v := New(b, WithStyles(testStyles())).Viewport()
+	if err := v.SetText("aaaa"); err != nil {
+		t.Fatal(err)
+	}
+	v.SetHorizontalScroll(ScrollSpeed(10), ScrollFromLeft())
+	if v.offset != v.textWidth || v.offset != 40 {
+		t.Fatalf("initial offset=%d width=%d", v.offset, v.textWidth)
+	}
+	v.owner.Update(base)
+	if err := v.owner.Render(); err != nil {
+		t.Fatal(err)
+	}
+	for index, value := range v.buffer {
+		if value != 0 {
+			t.Fatalf("initial off-screen buffer byte %d = %#02x", index, value)
+		}
+	}
+	v.owner.Update(base.Add(time.Second))
+	if v.offset != 30 {
+		t.Fatalf("one-second X=%d, want -30", -v.offset)
+	}
+	if err := v.owner.Render(); err != nil {
+		t.Fatal(err)
+	}
+	v.owner.Update(base.Add(6 * time.Second))
+	if !v.finished || !v.dirty || v.offset != -v.bounds.Width {
+		t.Fatalf("finished=%v dirty=%v offset=%d", v.finished, v.dirty, v.offset)
+	}
+	transfers := len(b.begins)
+	if err := v.owner.Render(); err != nil {
+		t.Fatal(err)
+	}
+	for index, value := range v.buffer {
+		if value != 0 {
+			t.Fatalf("finished buffer byte %d = %#02x", index, value)
+		}
+	}
+	if len(b.begins) != transfers+1 {
+		t.Fatalf("finish transfers=%d, want %d", len(b.begins), transfers+1)
+	}
+	v.owner.Update(base.Add(20 * time.Second))
+	if err := v.owner.Render(); err != nil {
+		t.Fatal(err)
+	}
+	if v.dirty || len(b.begins) != transfers+1 {
+		t.Fatalf("post-finish dirty=%v transfers=%d", v.dirty, len(b.begins))
+	}
+}
+
+func TestScrollFromLeftShortTextAndSingleCopy(t *testing.T) {
+	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	v := New(&testBackend{width: 20, height: 10}, WithStyles(testStyles())).Viewport()
+	if err := v.SetText("a"); err != nil {
+		t.Fatal(err)
+	}
+	v.SetHorizontalScroll(ScrollSpeed(15), ScrollLoop(), ScrollFromLeft())
+	v.owner.Update(base)
+	v.owner.Update(base.Add(time.Second))
+	if v.offset != -5 {
+		t.Fatalf("short text X=%d, want 5", -v.offset)
+	}
+	if err := v.owner.Render(); err != nil {
+		t.Fatal(err)
+	}
+	for x := 5; x < 15; x++ {
+		color := Color565(uint16(v.buffer[x*2])<<8 | uint16(v.buffer[x*2+1]))
+		if color != ColorWhite {
+			t.Fatalf("first copy pixel x=%d color=%#04x", x, color)
+		}
+	}
+	color := Color565(uint16(v.buffer[15*2])<<8 | uint16(v.buffer[15*2+1]))
+	if color != ColorBlack {
+		t.Fatalf("unexpected second copy pixel=%#04x", color)
+	}
+}
+
+func TestScrollFromLeftResetAndIrregularTiming(t *testing.T) {
+	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	newView := func() *Viewport {
+		v := New(&testBackend{width: 20, height: 10}, WithStyles(testStyles())).Viewport()
+		if err := v.SetText("aaaa"); err != nil {
+			t.Fatal(err)
+		}
+		v.SetHorizontalScroll(ScrollSpeed(10), ScrollFromLeft())
+		return v
+	}
+	a := newView()
+	a.update(base)
+	a.update(base.Add(300 * time.Millisecond))
+	a.update(base.Add(1700 * time.Millisecond))
+	b := newView()
+	b.update(base)
+	b.update(base.Add(1700 * time.Millisecond))
+	if a.offset != b.offset || a.finished != b.finished {
+		t.Fatalf("irregular offset=%d finished=%v, direct offset=%d finished=%v", a.offset, a.finished, b.offset, b.finished)
+	}
+	a.update(base.Add(6 * time.Second))
+	if !a.finished {
+		t.Fatal("scroll did not finish at text width + viewport width")
+	}
+	if err := a.SetText("aaaa"); err != nil {
+		t.Fatal(err)
+	}
+	if a.finished || a.started || a.offset != a.textWidth {
+		t.Fatalf("SetText reset: finished=%v started=%v offset=%d width=%d", a.finished, a.started, a.offset, a.textWidth)
+	}
+	a.finished, a.started = true, true
+	a.SetHorizontalScroll(ScrollSpeed(12), ScrollFromLeft())
+	if a.finished || a.started || a.offset != a.textWidth {
+		t.Fatalf("SetHorizontalScroll reset: finished=%v started=%v offset=%d width=%d", a.finished, a.started, a.offset, a.textWidth)
+	}
+}
+
+func TestScrollFromLeftErrorAndAllocations(t *testing.T) {
+	want := errors.New("from-left blit failed")
+	b := &testBackend{width: 20, height: 10, writeErr: want}
+	v := New(b, WithStyles(testStyles())).Viewport()
+	if err := v.SetText("aaaa"); err != nil {
+		t.Fatal(err)
+	}
+	v.SetHorizontalScroll(ScrollSpeed(10), ScrollFromLeft())
+	v.update(time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC))
+	if err := v.owner.Render(); !errors.Is(err, want) {
+		t.Fatalf("backend error=%v", err)
+	}
+	if !v.dirty {
+		t.Fatal("backend error cleared dirty")
+	}
+
+	v = New(&allocationBackend{}, WithStyles(testStyles())).Viewport()
+	if err := v.SetText("aaaa"); err != nil {
+		t.Fatal(err)
+	}
+	v.SetHorizontalScroll(ScrollSpeed(10), ScrollFromLeft())
+	v.update(time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC))
+	if err := v.owner.Render(); err != nil {
+		t.Fatal(err)
+	}
+	allocations := testing.AllocsPerRun(100, func() {
+		v.dirty = true
+		if err := v.owner.Render(); err != nil {
+			panic(err)
+		}
+	})
+	if allocations != 0 {
+		t.Fatalf("from-left steady Render allocations=%v", allocations)
+	}
+}
+
+func TestScrollFromRightPositionAndFinish(t *testing.T) {
+	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	b := &testBackend{width: 20, height: 10}
+	v := New(b, WithStyles(testStyles())).Viewport()
+	if err := v.SetText("aaaa"); err != nil {
+		t.Fatal(err)
+	}
+	v.SetHorizontalScroll(ScrollSpeed(10), ScrollFromRight())
+	if v.offset != -v.bounds.Width || -v.offset != 20 {
+		t.Fatalf("initial offset=%d X=%d", v.offset, -v.offset)
+	}
+	v.owner.Update(base)
+	if err := v.owner.Render(); err != nil {
+		t.Fatal(err)
+	}
+	for index, value := range v.buffer {
+		if value != 0 {
+			t.Fatalf("initial off-screen buffer byte %d = %#02x", index, value)
+		}
+	}
+	v.owner.Update(base.Add(time.Second))
+	if -v.offset != 10 {
+		t.Fatalf("one-second X=%d, want 10", -v.offset)
+	}
+	if err := v.owner.Render(); err != nil {
+		t.Fatal(err)
+	}
+	v.owner.Update(base.Add(6 * time.Second))
+	if !v.finished || !v.dirty || v.offset != v.textWidth {
+		t.Fatalf("finished=%v dirty=%v offset=%d width=%d", v.finished, v.dirty, v.offset, v.textWidth)
+	}
+	transfers := len(b.begins)
+	if err := v.owner.Render(); err != nil {
+		t.Fatal(err)
+	}
+	for index, value := range v.buffer {
+		if value != 0 {
+			t.Fatalf("finished buffer byte %d = %#02x", index, value)
+		}
+	}
+	if len(b.begins) != transfers+1 {
+		t.Fatalf("finish transfers=%d, want %d", len(b.begins), transfers+1)
+	}
+	v.owner.Update(base.Add(20 * time.Second))
+	if err := v.owner.Render(); err != nil {
+		t.Fatal(err)
+	}
+	if v.dirty || len(b.begins) != transfers+1 {
+		t.Fatalf("post-finish dirty=%v transfers=%d", v.dirty, len(b.begins))
+	}
+}
+
+func TestScrollFromRightShortTextSingleCopyAndReset(t *testing.T) {
+	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	v := New(&testBackend{width: 20, height: 10}, WithStyles(testStyles())).Viewport()
+	if err := v.SetText("a"); err != nil {
+		t.Fatal(err)
+	}
+	v.SetHorizontalScroll(ScrollSpeed(15), ScrollLoop(), ScrollFromRight())
+	v.update(base)
+	v.update(base.Add(time.Second))
+	if -v.offset != 5 {
+		t.Fatalf("short text X=%d, want 5", -v.offset)
+	}
+	if err := v.owner.Render(); err != nil {
+		t.Fatal(err)
+	}
+	for x := 5; x < 15; x++ {
+		color := Color565(uint16(v.buffer[x*2])<<8 | uint16(v.buffer[x*2+1]))
+		if color != ColorWhite {
+			t.Fatalf("first copy pixel x=%d color=%#04x", x, color)
+		}
+	}
+	color := Color565(uint16(v.buffer[15*2])<<8 | uint16(v.buffer[15*2+1]))
+	if color != ColorBlack {
+		t.Fatalf("unexpected second copy pixel=%#04x", color)
+	}
+	v.update(base.Add(2 * time.Second))
+	if !v.finished {
+		t.Fatal("short text did not finish at viewport width + text width")
+	}
+	if err := v.SetText("a"); err != nil {
+		t.Fatal(err)
+	}
+	if v.finished || v.started || v.offset != -v.bounds.Width {
+		t.Fatalf("SetText reset: finished=%v started=%v offset=%d", v.finished, v.started, v.offset)
+	}
+	v.finished, v.started = true, true
+	v.SetHorizontalScroll(ScrollSpeed(12), ScrollFromRight())
+	if v.finished || v.started || v.offset != -v.bounds.Width {
+		t.Fatalf("SetHorizontalScroll reset: finished=%v started=%v offset=%d", v.finished, v.started, v.offset)
+	}
+}
+
+func TestScrollFromRightIrregularErrorAndAllocations(t *testing.T) {
+	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	newView := func(backend Backend) *Viewport {
+		v := New(backend, WithStyles(testStyles())).Viewport()
+		if err := v.SetText("aaaa"); err != nil {
+			t.Fatal(err)
+		}
+		v.SetHorizontalScroll(ScrollSpeed(10), ScrollFromRight())
+		return v
+	}
+	a := newView(&testBackend{width: 20, height: 10})
+	a.update(base)
+	a.update(base.Add(300 * time.Millisecond))
+	a.update(base.Add(1700 * time.Millisecond))
+	b := newView(&testBackend{width: 20, height: 10})
+	b.update(base)
+	b.update(base.Add(1700 * time.Millisecond))
+	if a.offset != b.offset || a.finished != b.finished {
+		t.Fatalf("irregular offset=%d finished=%v, direct offset=%d finished=%v", a.offset, a.finished, b.offset, b.finished)
+	}
+
+	want := errors.New("from-right blit failed")
+	errorBackend := &testBackend{width: 20, height: 10, writeErr: want}
+	v := newView(errorBackend)
+	v.update(base)
+	if err := v.owner.Render(); !errors.Is(err, want) {
+		t.Fatalf("backend error=%v", err)
+	}
+	if !v.dirty {
+		t.Fatal("backend error cleared dirty")
+	}
+
+	v = newView(&allocationBackend{})
+	v.update(base)
+	if err := v.owner.Render(); err != nil {
+		t.Fatal(err)
+	}
+	allocations := testing.AllocsPerRun(100, func() {
+		v.dirty = true
+		if err := v.owner.Render(); err != nil {
+			panic(err)
+		}
+	})
+	if allocations != 0 {
+		t.Fatalf("from-right steady Render allocations=%v", allocations)
+	}
+}
+
 func (v *Viewport) UpdateForTest(now time.Time) { v.update(now) }
 
 func TestErrorsReturned(t *testing.T) {

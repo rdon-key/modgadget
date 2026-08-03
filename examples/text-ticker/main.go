@@ -63,8 +63,7 @@ func main() {
 		}
 		view.SetHorizontalScroll(
 			modgadget.ScrollSpeed(ticker.speed),
-			modgadget.ScrollGap(32),
-			modgadget.ScrollLoop(),
+			modgadget.ScrollFromRight(),
 		)
 	}
 	start := time.Now()

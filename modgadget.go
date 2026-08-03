@@ -80,9 +80,11 @@ func Bounds(x, y, width, height int16) ViewportOption {
 type ScrollOption func(*horizontalScroll)
 
 type horizontalScroll struct {
-	speed float64
-	gap   int16
-	loop  bool
+	speed     float64
+	gap       int16
+	loop      bool
+	fromLeft  bool
+	fromRight bool
 }
 
 func ScrollSpeed(pixelsPerSecond float64) ScrollOption {
@@ -90,6 +92,16 @@ func ScrollSpeed(pixelsPerSecond float64) ScrollOption {
 }
 func ScrollGap(pixels int16) ScrollOption { return func(s *horizontalScroll) { s.gap = pixels } }
 func ScrollLoop() ScrollOption            { return func(s *horizontalScroll) { s.loop = true } }
+
+// ScrollFromLeft starts the text outside the left edge and moves it right once.
+func ScrollFromLeft() ScrollOption {
+	return func(s *horizontalScroll) { s.fromLeft, s.fromRight = true, false }
+}
+
+// ScrollFromRight starts the text outside the right edge and moves it left once.
+func ScrollFromRight() ScrollOption {
+	return func(s *horizontalScroll) { s.fromRight, s.fromLeft = true, false }
+}
 
 type Viewport struct {
 	owner          *Gadget
@@ -107,6 +119,7 @@ type Viewport struct {
 	scroll         horizontalScroll
 	scrollEnabled  bool
 	started        bool
+	finished       bool
 	start          time.Time
 	offset         int16
 }
@@ -130,9 +143,12 @@ func (g *Gadget) Viewport(options ...ViewportOption) *Viewport {
 
 func (v *Viewport) SetText(value string) error {
 	if v.text == value {
+		if v.scroll.oneShot() {
+			v.started, v.finished, v.offset, v.dirty = false, false, v.initialScrollOffset(), true
+		}
 		return v.parseErr
 	}
-	v.text, v.dirty, v.started, v.offset = value, true, false, 0
+	v.text, v.dirty, v.started, v.finished, v.offset = value, true, false, false, 0
 	if v.owner == nil {
 		v.parseErr = fmt.Errorf("modgadget: viewport has no gadget")
 		return v.parseErr
@@ -152,6 +168,9 @@ func (v *Viewport) SetText(value string) error {
 		return v.parseErr
 	}
 	v.layout, v.textWidth, v.parseErr = layout, layout.Measurement().MaxAdvanceX, nil
+	if v.scroll.oneShot() {
+		v.offset = v.initialScrollOffset()
+	}
 	maxGlyphWidth := int16(1)
 	for i := range spans {
 		for _, r := range spans[i].Value {
@@ -173,7 +192,13 @@ func (v *Viewport) SetHorizontalScroll(options ...ScrollOption) {
 			option(&s)
 		}
 	}
-	v.scroll, v.scrollEnabled, v.started, v.offset, v.dirty = s, s.speed > 0, false, 0, true
+	offset := int16(0)
+	if s.fromLeft {
+		offset = v.textWidth
+	} else if s.fromRight {
+		offset = -v.bounds.Width
+	}
+	v.scroll, v.scrollEnabled, v.started, v.finished, v.offset, v.dirty = s, s.speed > 0, false, false, offset, true
 }
 
 func (v *Viewport) Clear() { _ = v.SetText("") }
@@ -194,7 +219,10 @@ func (g *Gadget) Update(now time.Time) {
 }
 
 func (v *Viewport) update(now time.Time) {
-	if !v.scrollEnabled || v.scroll.speed <= 0 || v.textWidth <= v.bounds.Width {
+	if !v.scrollEnabled || v.scroll.speed <= 0 || (!v.scroll.oneShot() && v.textWidth <= v.bounds.Width) {
+		return
+	}
+	if v.scroll.oneShot() && v.finished {
 		return
 	}
 	if !v.started {
@@ -210,6 +238,45 @@ func (v *Viewport) update(now time.Time) {
 		next = math.MaxInt64
 	} else {
 		next = int64(pixels)
+	}
+	if v.scroll.fromLeft {
+		distance := next
+		travel := int64(v.textWidth) + int64(v.bounds.Width)
+		if distance >= travel {
+			v.offset = -v.bounds.Width
+			v.finished = true
+			v.dirty = true
+			return
+		}
+		next = int64(v.textWidth) - distance
+		if next < math.MinInt16 {
+			next = math.MinInt16
+		}
+		if int16(next) != v.offset {
+			v.offset, v.dirty = int16(next), true
+		}
+		return
+	}
+	if v.scroll.fromRight {
+		distance := next
+		travel := int64(v.bounds.Width) + int64(v.textWidth)
+		if distance >= travel {
+			v.offset = v.textWidth
+			v.finished = true
+			v.dirty = true
+			return
+		}
+		next = distance - int64(v.bounds.Width)
+		if next < math.MinInt16 {
+			next = math.MinInt16
+		}
+		if next > math.MaxInt16 {
+			next = math.MaxInt16
+		}
+		if int16(next) != v.offset {
+			v.offset, v.dirty = int16(next), true
+		}
+		return
 	}
 	if v.scroll.loop {
 		cycle := int64(v.textWidth) + int64(v.scroll.gap)
@@ -251,7 +318,7 @@ func (v *Viewport) render(backend display.Backend) error {
 	if v.parseErr != nil {
 		return v.parseErr
 	}
-	if v.scrollEnabled && v.scroll.speed > 0 && v.textWidth > v.bounds.Width {
+	if v.scrollEnabled && v.scroll.speed > 0 && (v.scroll.oneShot() || v.textWidth > v.bounds.Width) {
 		return v.renderBuffered(backend)
 	}
 	return v.renderDirect(backend)
@@ -282,7 +349,7 @@ func (v *Viewport) renderBuffered(backend display.Backend) error {
 	if err := display.FillRect(v.surface, display.Rect{Width: v.bounds.Width, Height: v.bounds.Height}, v.owner.styles.Default.Background, v.fillScratch[:]); err != nil {
 		return fmt.Errorf("modgadget: clear viewport buffer: %w", err)
 	}
-	if v.text != "" {
+	if v.text != "" && !(v.scroll.oneShot() && v.finished) {
 		if err := v.drawText(v.surfaceBackend); err != nil {
 			return err
 		}
@@ -325,7 +392,7 @@ func (v *Viewport) drawText(backend display.Backend) error {
 	if _, err := v.layout.Draw(backend, penX, baseline, v.scratch); err != nil {
 		return fmt.Errorf("modgadget: draw text: %w", err)
 	}
-	if v.scroll.loop && v.scrollEnabled && v.textWidth > v.bounds.Width {
+	if v.scroll.loop && !v.scroll.oneShot() && v.scrollEnabled && v.textWidth > v.bounds.Width {
 		next := int32(penX) + int32(v.textWidth) + int32(v.scroll.gap)
 		if next <= math.MaxInt16 && next >= math.MinInt16 {
 			if _, err := v.layout.Draw(backend, int16(next), baseline, v.scratch); err != nil {
@@ -334,4 +401,16 @@ func (v *Viewport) drawText(backend display.Backend) error {
 		}
 	}
 	return nil
+}
+
+func (scroll horizontalScroll) oneShot() bool { return scroll.fromLeft || scroll.fromRight }
+
+func (v *Viewport) initialScrollOffset() int16 {
+	if v.scroll.fromLeft {
+		return v.textWidth
+	}
+	if v.scroll.fromRight {
+		return -v.bounds.Width
+	}
+	return 0
 }
