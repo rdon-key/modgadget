@@ -187,6 +187,89 @@ func TestErrorsReturned(t *testing.T) {
 	}
 }
 
+func TestGadgetClear(t *testing.T) {
+	background := RGB565(17, 99, 201)
+	styles := testStyles()
+	styles.Default.Background = background
+	b := &testBackend{width: 13, height: 7, capture: make([]byte, 0, 13*7*2*2)}
+	g := New(b, WithStyles(styles))
+	if err := g.Clear(); err != nil {
+		t.Fatal(err)
+	}
+	wantRect := display.Rect{Width: 13, Height: 7}
+	if len(b.begins) != 1 || b.begins[0] != wantRect {
+		t.Fatalf("clear rectangles = %+v, want %+v", b.begins, wantRect)
+	}
+	if b.written != 13*7*2 || b.ends != 1 {
+		t.Fatalf("written=%d ends=%d", b.written, b.ends)
+	}
+	for index := 0; index < len(b.capture); index += 2 {
+		color := Color565(uint16(b.capture[index])<<8 | uint16(b.capture[index+1]))
+		if color != background {
+			t.Fatalf("pixel %d = %#04x, want %#04x", index/2, color, background)
+		}
+	}
+	if err := g.Clear(); err != nil {
+		t.Fatal(err)
+	}
+	if len(b.begins) != 2 || b.ends != 2 {
+		t.Fatalf("second clear begins=%d ends=%d", len(b.begins), b.ends)
+	}
+}
+
+func TestGadgetClearDoesNotChangeViewportDirty(t *testing.T) {
+	g := New(&testBackend{width: 20, height: 10}, WithStyles(testStyles()))
+	v := g.Viewport()
+	v.dirty = false
+	if err := g.Clear(); err != nil {
+		t.Fatal(err)
+	}
+	if v.dirty {
+		t.Fatal("Clear changed viewport dirty state")
+	}
+}
+
+func TestGadgetClearErrors(t *testing.T) {
+	if err := (*Gadget)(nil).Clear(); !errors.Is(err, display.ErrNilBackend) {
+		t.Fatalf("nil Gadget error = %v", err)
+	}
+	if err := New(nil).Clear(); !errors.Is(err, display.ErrNilBackend) {
+		t.Fatalf("nil backend error = %v", err)
+	}
+	want := errors.New("clear failed")
+	tests := []struct {
+		name    string
+		backend *testBackend
+	}{
+		{name: "begin", backend: &testBackend{width: 20, height: 10, beginErr: want}},
+		{name: "write", backend: &testBackend{width: 20, height: 10, writeErr: want}},
+		{name: "end", backend: &testBackend{width: 20, height: 10, endErr: want}},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			g := New(test.backend, WithStyles(testStyles()))
+			if err := g.Clear(); !errors.Is(err, want) {
+				t.Fatalf("backend error = %v", err)
+			}
+		})
+	}
+}
+
+func TestGadgetClearSteadyAllocations(t *testing.T) {
+	g := New(&allocationBackend{}, WithStyles(testStyles()))
+	if err := g.Clear(); err != nil {
+		t.Fatal(err)
+	}
+	allocations := testing.AllocsPerRun(100, func() {
+		if err := g.Clear(); err != nil {
+			panic(err)
+		}
+	})
+	if allocations != 0 {
+		t.Fatalf("steady Clear allocations = %v", allocations)
+	}
+}
+
 func TestDirectAndBufferedRendering(t *testing.T) {
 	staticBackend := &testBackend{width: 20, height: 10}
 	static := New(staticBackend, WithStyles(testStyles())).Viewport()

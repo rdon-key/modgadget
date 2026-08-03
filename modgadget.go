@@ -38,9 +38,27 @@ type Option func(*Gadget)
 func WithStyles(styles StyleSet) Option { return func(g *Gadget) { g.styles = styles } }
 
 type Gadget struct {
-	backend   display.Backend
-	styles    text.StyleSet
-	viewports []*Viewport
+	backend      display.Backend
+	styles       text.StyleSet
+	viewports    []*Viewport
+	clearScratch [64]byte
+}
+
+// Clear fills the entire physical display with the default background color.
+func (g *Gadget) Clear() error {
+	if g == nil || g.backend == nil {
+		return fmt.Errorf("modgadget: clear display: %w", display.ErrNilBackend)
+	}
+	width, height := g.backend.Size()
+	if err := display.FillRect(
+		g.backend,
+		display.Rect{Width: width, Height: height},
+		g.styles.Default.Background,
+		g.clearScratch[:],
+	); err != nil {
+		return fmt.Errorf("modgadget: clear display: %w", err)
+	}
+	return nil
 }
 
 func New(backend Backend, options ...Option) *Gadget {
