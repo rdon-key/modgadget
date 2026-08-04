@@ -12,6 +12,8 @@ import (
 	"github.com/rdon-key/modgadget/internal/text/markup"
 )
 
+const maxKeyEventsPerUpdate = 64
+
 // Display receives row-major RGB565 pixel data for rectangular display regions.
 type Display = displaypkg.Backend
 type Color565 = displaypkg.Color565
@@ -39,10 +41,15 @@ type Option func(*Gadget)
 func WithStyles(styles StyleSet) Option { return func(g *Gadget) { g.styles = styles } }
 
 type Gadget struct {
-	display      Display
-	styles       text.StyleSet
-	viewports    []*Viewport
-	clearScratch [64]byte
+	display           Display
+	styles            text.StyleSet
+	viewports         []*Viewport
+	clearScratch      [64]byte
+	keyboard          Keyboard
+	keyListeners      []keyListener
+	nextListener      ListenerID
+	keyDispatchDepth  int
+	keyListenersDirty bool
 }
 
 // Clear fills the entire Display, as reported by Display.Size, with the default
@@ -216,6 +223,15 @@ func (v *Viewport) ScrollTo(pixel int16) {
 func (g *Gadget) Update(now time.Time) {
 	if g == nil {
 		return
+	}
+	if g.keyboard != nil {
+		for count := 0; count < maxKeyEventsPerUpdate; count++ {
+			event, ok := g.keyboard.ReadKeyEvent()
+			if !ok {
+				break
+			}
+			g.dispatchKey(event)
+		}
 	}
 	for _, v := range g.viewports {
 		v.update(now)

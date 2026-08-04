@@ -5,6 +5,7 @@
 ModGadget is a TinyGo display/UI toolkit for small embedded devices.
 
 See [Public API](docs/public-api.md) for the current high-level API.
+See [Keyboard API](docs/keyboard.md) for direct key-event input.
 
 It currently renders RGB565 graphics directly to an ST7789 without requiring a full framebuffer.
 
