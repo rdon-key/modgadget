@@ -409,6 +409,15 @@ verify zero allocations during steady-state buffered Render. `SetText` may
 allocate while parsing markup, constructing the layout, and sizing glyph
 scratch storage.
 
+## Keyboard
+
+ModGadget drains and dispatches direct physical key events during
+`Gadget.Update`. The current API is Key mode only; it does not implement text
+composition or IME conversion. Keyboard input is independent of `Display`.
+
+See [Keyboard API](keyboard.md) for event fields, handler and listener rules,
+and the Cardputer ADV adapter.
+
 ## Public API reference
 
 Only identifiers currently exported by the root package are listed here.
@@ -498,7 +507,23 @@ Only identifiers currently exported by the root package are listed here.
 | --- | --- | --- |
 | `type Option func(*Gadget)` | Gadget option | Nil options are ignored |
 | `func WithStyles(styles StyleSet) Option` | Supplies Styles | Applied during New |
+| `func WithKeyboard(keyboard Keyboard) Option` | Supplies a key-event source | Nil means no Keyboard |
 | `type ViewportOption func(*Viewport)` | Viewport option | Nil options are ignored |
+
+### Keyboard
+
+| Signature | Description | Error and notes |
+| --- | --- | --- |
+| `type Keyboard interface { ReadKeyEvent() (KeyEvent, bool) }` | Queued direct key source | Empty is false, not an error |
+| `type KeyEvent struct { Code KeyCode; Rune rune; Action KeyAction; Modifiers Modifiers }` | Logical key transition after layer mapping | Rune is one direct printable character |
+| `type KeyCode uint16` | Layer-applied logical key identity | Standard values follow USB HID usages |
+| `type KeyAction uint8` | Unknown, press, or release | Zero is unknown; no repeat action |
+| `type Modifiers uint16` | Modifier bit set | Shift, Control, Alt, Meta, and Fn |
+| `func (m Modifiers) Has(value Modifiers) bool` | Tests all requested bits | No error |
+| `type KeyHandler func(KeyEvent) bool` | Handles or consumes an event | True stops later handlers |
+| `type ListenerID uint16` | Listener identity | Zero is invalid |
+| `func (g *Gadget) OnKey(handler KeyHandler) ListenerID` | Registers in call order | Nil returns zero |
+| `func (g *Gadget) RemoveListener(id ListenerID) bool` | Removes by ID | Reports whether it removed a live listener |
 
 ## Current limitations
 
@@ -508,8 +533,9 @@ Only identifiers currently exported by the root package are listed here.
 - TinyGo target selection, SPI configuration, and pin setup belong to the
   application.
 - There are no Widgets.
-- There is no input API, Keyboard, Touch, or Pointer interface.
-- There is no focus or event dispatch.
+- Keyboard provides direct Key events only; there is no Text input or IME API.
+- There is no Touch or Pointer interface.
+- There is no focus, Widget event bubbling, or capture phase.
 - There is no z-index or compositor.
 - There is no vertical automatic scroll.
 - Viewports cannot be resized or removed.
