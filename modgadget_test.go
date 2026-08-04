@@ -30,7 +30,7 @@ func (f testFont) Lookup(r rune) (text.Glyph, bool) {
 }
 func (testFont) Metrics() text.FontMetrics { return text.FontMetrics{Ascent: 8} }
 
-type testBackend struct {
+type testDisplay struct {
 	width, height int16
 	beginErr      error
 	writeErr      error
@@ -43,8 +43,10 @@ type testBackend struct {
 	capture       []byte
 }
 
-func (b *testBackend) Size() (int16, int16) { return b.width, b.height }
-func (b *testBackend) BeginRect(x, y, w, h int16) error {
+var _ Display = (*testDisplay)(nil)
+
+func (b *testDisplay) Size() (int16, int16) { return b.width, b.height }
+func (b *testDisplay) BeginRect(x, y, w, h int16) error {
 	if b.beginErr != nil {
 		return b.beginErr
 	}
@@ -52,7 +54,7 @@ func (b *testBackend) BeginRect(x, y, w, h int16) error {
 	b.remaining = int(w) * int(h) * 2
 	return nil
 }
-func (b *testBackend) WritePixels(p []byte) error {
+func (b *testDisplay) WritePixels(p []byte) error {
 	if b.writeErr != nil {
 		return b.writeErr
 	}
@@ -64,14 +66,14 @@ func (b *testBackend) WritePixels(p []byte) error {
 	}
 	return nil
 }
-func (b *testBackend) EndRect() error { b.ends++; return b.endErr }
+func (b *testDisplay) EndRect() error { b.ends++; return b.endErr }
 
 func testStyles() StyleSet {
 	return StyleSet{Default: Style{Font: testFont{advance: 10}, Foreground: ColorWhite, Background: ColorBlack}, Entries: []StyleEntry{{Name: "news", Style: Style{Font: testFont{advance: 10}, Foreground: ColorGreen, Background: ColorBlack}}}}
 }
 
 func TestViewportBounds(t *testing.T) {
-	b := &testBackend{width: 240, height: 135}
+	b := &testDisplay{width: 240, height: 135}
 	g := New(b, WithStyles(testStyles()))
 	whole := g.Viewport()
 	if whole.bounds != (display.Rect{Width: 240, Height: 135}) {
@@ -94,12 +96,12 @@ func TestViewportBounds(t *testing.T) {
 		}
 	}
 	if !found {
-		t.Fatal("bounded viewport was not forwarded to backend")
+		t.Fatal("bounded viewport was not forwarded to display")
 	}
 }
 
 func TestSetTextDirtyAndSameValue(t *testing.T) {
-	v := New(&testBackend{width: 20, height: 10}, WithStyles(testStyles())).Viewport()
+	v := New(&testDisplay{width: 20, height: 10}, WithStyles(testStyles())).Viewport()
 	v.dirty = false
 	if err := v.SetText("ab"); err != nil {
 		t.Fatal(err)
@@ -119,7 +121,7 @@ func TestSetTextDirtyAndSameValue(t *testing.T) {
 func TestHorizontalScrollTiming(t *testing.T) {
 	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	newView := func(width int16) *Viewport {
-		v := New(&testBackend{width: width, height: 10}, WithStyles(testStyles())).Viewport()
+		v := New(&testDisplay{width: width, height: 10}, WithStyles(testStyles())).Viewport()
 		if err := v.SetText("abcd"); err != nil {
 			t.Fatal(err)
 		}
@@ -167,7 +169,7 @@ func TestHorizontalScrollTiming(t *testing.T) {
 
 func TestScrollFromLeftPositionAndFinish(t *testing.T) {
 	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
-	b := &testBackend{width: 20, height: 10}
+	b := &testDisplay{width: 20, height: 10}
 	v := New(b, WithStyles(testStyles())).Viewport()
 	if err := v.SetText("aaaa"); err != nil {
 		t.Fatal(err)
@@ -219,7 +221,7 @@ func TestScrollFromLeftPositionAndFinish(t *testing.T) {
 
 func TestScrollFromLeftShortTextAndSingleCopy(t *testing.T) {
 	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
-	v := New(&testBackend{width: 20, height: 10}, WithStyles(testStyles())).Viewport()
+	v := New(&testDisplay{width: 20, height: 10}, WithStyles(testStyles())).Viewport()
 	if err := v.SetText("a"); err != nil {
 		t.Fatal(err)
 	}
@@ -247,7 +249,7 @@ func TestScrollFromLeftShortTextAndSingleCopy(t *testing.T) {
 func TestScrollFromLeftResetAndIrregularTiming(t *testing.T) {
 	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	newView := func() *Viewport {
-		v := New(&testBackend{width: 20, height: 10}, WithStyles(testStyles())).Viewport()
+		v := New(&testDisplay{width: 20, height: 10}, WithStyles(testStyles())).Viewport()
 		if err := v.SetText("aaaa"); err != nil {
 			t.Fatal(err)
 		}
@@ -283,7 +285,7 @@ func TestScrollFromLeftResetAndIrregularTiming(t *testing.T) {
 
 func TestScrollFromLeftErrorAndAllocations(t *testing.T) {
 	want := errors.New("from-left blit failed")
-	b := &testBackend{width: 20, height: 10, writeErr: want}
+	b := &testDisplay{width: 20, height: 10, writeErr: want}
 	v := New(b, WithStyles(testStyles())).Viewport()
 	if err := v.SetText("aaaa"); err != nil {
 		t.Fatal(err)
@@ -291,13 +293,13 @@ func TestScrollFromLeftErrorAndAllocations(t *testing.T) {
 	v.SetHorizontalScroll(ScrollSpeed(10), ScrollFromLeft())
 	v.update(time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC))
 	if err := v.owner.Render(); !errors.Is(err, want) {
-		t.Fatalf("backend error=%v", err)
+		t.Fatalf("display error=%v", err)
 	}
 	if !v.dirty {
-		t.Fatal("backend error cleared dirty")
+		t.Fatal("display error cleared dirty")
 	}
 
-	v = New(&allocationBackend{}, WithStyles(testStyles())).Viewport()
+	v = New(&allocationDisplay{}, WithStyles(testStyles())).Viewport()
 	if err := v.SetText("aaaa"); err != nil {
 		t.Fatal(err)
 	}
@@ -319,7 +321,7 @@ func TestScrollFromLeftErrorAndAllocations(t *testing.T) {
 
 func TestScrollFromRightPositionAndFinish(t *testing.T) {
 	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
-	b := &testBackend{width: 20, height: 10}
+	b := &testDisplay{width: 20, height: 10}
 	v := New(b, WithStyles(testStyles())).Viewport()
 	if err := v.SetText("aaaa"); err != nil {
 		t.Fatal(err)
@@ -371,7 +373,7 @@ func TestScrollFromRightPositionAndFinish(t *testing.T) {
 
 func TestScrollFromRightShortTextSingleCopyAndReset(t *testing.T) {
 	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
-	v := New(&testBackend{width: 20, height: 10}, WithStyles(testStyles())).Viewport()
+	v := New(&testDisplay{width: 20, height: 10}, WithStyles(testStyles())).Viewport()
 	if err := v.SetText("a"); err != nil {
 		t.Fatal(err)
 	}
@@ -413,19 +415,19 @@ func TestScrollFromRightShortTextSingleCopyAndReset(t *testing.T) {
 
 func TestScrollFromRightIrregularErrorAndAllocations(t *testing.T) {
 	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
-	newView := func(backend Backend) *Viewport {
-		v := New(backend, WithStyles(testStyles())).Viewport()
+	newView := func(target Display) *Viewport {
+		v := New(target, WithStyles(testStyles())).Viewport()
 		if err := v.SetText("aaaa"); err != nil {
 			t.Fatal(err)
 		}
 		v.SetHorizontalScroll(ScrollSpeed(10), ScrollFromRight())
 		return v
 	}
-	a := newView(&testBackend{width: 20, height: 10})
+	a := newView(&testDisplay{width: 20, height: 10})
 	a.update(base)
 	a.update(base.Add(300 * time.Millisecond))
 	a.update(base.Add(1700 * time.Millisecond))
-	b := newView(&testBackend{width: 20, height: 10})
+	b := newView(&testDisplay{width: 20, height: 10})
 	b.update(base)
 	b.update(base.Add(1700 * time.Millisecond))
 	if a.offset != b.offset || a.finished != b.finished {
@@ -433,17 +435,17 @@ func TestScrollFromRightIrregularErrorAndAllocations(t *testing.T) {
 	}
 
 	want := errors.New("from-right blit failed")
-	errorBackend := &testBackend{width: 20, height: 10, writeErr: want}
-	v := newView(errorBackend)
+	errorDisplay := &testDisplay{width: 20, height: 10, writeErr: want}
+	v := newView(errorDisplay)
 	v.update(base)
 	if err := v.owner.Render(); !errors.Is(err, want) {
-		t.Fatalf("backend error=%v", err)
+		t.Fatalf("display error=%v", err)
 	}
 	if !v.dirty {
-		t.Fatal("backend error cleared dirty")
+		t.Fatal("display error cleared dirty")
 	}
 
-	v = newView(&allocationBackend{})
+	v = newView(&allocationDisplay{})
 	v.update(base)
 	if err := v.owner.Render(); err != nil {
 		t.Fatal(err)
@@ -462,7 +464,7 @@ func TestScrollFromRightIrregularErrorAndAllocations(t *testing.T) {
 func (v *Viewport) UpdateForTest(now time.Time) { v.update(now) }
 
 func TestErrorsReturned(t *testing.T) {
-	g := New(&testBackend{width: 20, height: 10}, WithStyles(testStyles()))
+	g := New(&testDisplay{width: 20, height: 10}, WithStyles(testStyles()))
 	v := g.Viewport()
 	if err := v.SetText("<bad>"); err == nil {
 		t.Fatal("expected markup error")
@@ -470,8 +472,8 @@ func TestErrorsReturned(t *testing.T) {
 	if err := g.Render(); err == nil {
 		t.Fatal("Render did not return parse error")
 	}
-	want := errors.New("backend failure")
-	g = New(&testBackend{width: 20, height: 10, beginErr: want}, WithStyles(testStyles()))
+	want := errors.New("display failure")
+	g = New(&testDisplay{width: 20, height: 10, beginErr: want}, WithStyles(testStyles()))
 	v = g.Viewport()
 	if err := v.SetText("a"); err != nil {
 		t.Fatal(err)
@@ -485,7 +487,7 @@ func TestGadgetClear(t *testing.T) {
 	background := RGB565(17, 99, 201)
 	styles := testStyles()
 	styles.Default.Background = background
-	b := &testBackend{width: 13, height: 7, capture: make([]byte, 0, 13*7*2*2)}
+	b := &testDisplay{width: 13, height: 7, capture: make([]byte, 0, 13*7*2*2)}
 	g := New(b, WithStyles(styles))
 	if err := g.Clear(); err != nil {
 		t.Fatal(err)
@@ -512,7 +514,7 @@ func TestGadgetClear(t *testing.T) {
 }
 
 func TestGadgetClearDoesNotChangeViewportDirty(t *testing.T) {
-	g := New(&testBackend{width: 20, height: 10}, WithStyles(testStyles()))
+	g := New(&testDisplay{width: 20, height: 10}, WithStyles(testStyles()))
 	v := g.Viewport()
 	v.dirty = false
 	if err := g.Clear(); err != nil {
@@ -524,33 +526,36 @@ func TestGadgetClearDoesNotChangeViewportDirty(t *testing.T) {
 }
 
 func TestGadgetClearErrors(t *testing.T) {
-	if err := (*Gadget)(nil).Clear(); !errors.Is(err, display.ErrNilBackend) {
+	if err := (*Gadget)(nil).Clear(); err == nil || err.Error() != "modgadget: display is nil" {
 		t.Fatalf("nil Gadget error = %v", err)
 	}
-	if err := New(nil).Clear(); !errors.Is(err, display.ErrNilBackend) {
-		t.Fatalf("nil backend error = %v", err)
+	if err := New(nil).Clear(); err == nil || err.Error() != "modgadget: display is nil" {
+		t.Fatalf("nil display error = %v", err)
+	}
+	if err := New(nil).Render(); err == nil || err.Error() != "modgadget: display is nil" {
+		t.Fatalf("nil display Render error = %v", err)
 	}
 	want := errors.New("clear failed")
 	tests := []struct {
-		name    string
-		backend *testBackend
+		name   string
+		target *testDisplay
 	}{
-		{name: "begin", backend: &testBackend{width: 20, height: 10, beginErr: want}},
-		{name: "write", backend: &testBackend{width: 20, height: 10, writeErr: want}},
-		{name: "end", backend: &testBackend{width: 20, height: 10, endErr: want}},
+		{name: "begin", target: &testDisplay{width: 20, height: 10, beginErr: want}},
+		{name: "write", target: &testDisplay{width: 20, height: 10, writeErr: want}},
+		{name: "end", target: &testDisplay{width: 20, height: 10, endErr: want}},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			g := New(test.backend, WithStyles(testStyles()))
+			g := New(test.target, WithStyles(testStyles()))
 			if err := g.Clear(); !errors.Is(err, want) {
-				t.Fatalf("backend error = %v", err)
+				t.Fatalf("display error = %v", err)
 			}
 		})
 	}
 }
 
 func TestGadgetClearSteadyAllocations(t *testing.T) {
-	g := New(&allocationBackend{}, WithStyles(testStyles()))
+	g := New(&allocationDisplay{}, WithStyles(testStyles()))
 	if err := g.Clear(); err != nil {
 		t.Fatal(err)
 	}
@@ -565,8 +570,8 @@ func TestGadgetClearSteadyAllocations(t *testing.T) {
 }
 
 func TestDirectAndBufferedRendering(t *testing.T) {
-	staticBackend := &testBackend{width: 20, height: 10}
-	static := New(staticBackend, WithStyles(testStyles())).Viewport()
+	staticDisplay := &testDisplay{width: 20, height: 10}
+	static := New(staticDisplay, WithStyles(testStyles())).Viewport()
 	if err := static.SetText("a"); err != nil {
 		t.Fatal(err)
 	}
@@ -576,12 +581,12 @@ func TestDirectAndBufferedRendering(t *testing.T) {
 	if static.surface != nil {
 		t.Fatal("static viewport allocated a surface")
 	}
-	if len(staticBackend.begins) < 2 {
-		t.Fatalf("direct BeginRect count = %d", len(staticBackend.begins))
+	if len(staticDisplay.begins) < 2 {
+		t.Fatalf("direct BeginRect count = %d", len(staticDisplay.begins))
 	}
 
-	backend := &testBackend{width: 80, height: 30, capture: make([]byte, 0, 20*10*2)}
-	v := New(backend, WithStyles(testStyles())).Viewport(Bounds(7, 9, 20, 10))
+	target := &testDisplay{width: 80, height: 30, capture: make([]byte, 0, 20*10*2)}
+	v := New(target, WithStyles(testStyles())).Viewport(Bounds(7, 9, 20, 10))
 	if err := v.SetText("aaaa"); err != nil {
 		t.Fatal(err)
 	}
@@ -595,17 +600,17 @@ func TestDirectAndBufferedRendering(t *testing.T) {
 	if len(v.buffer) != 20*10*2 {
 		t.Fatalf("buffer length = %d", len(v.buffer))
 	}
-	if len(backend.begins) != 1 || backend.begins[0] != (display.Rect{X: 7, Y: 9, Width: 20, Height: 10}) {
-		t.Fatalf("blit rectangles = %+v", backend.begins)
+	if len(target.begins) != 1 || target.begins[0] != (display.Rect{X: 7, Y: 9, Width: 20, Height: 10}) {
+		t.Fatalf("blit rectangles = %+v", target.begins)
 	}
-	if backend.writes != 1 || backend.written != len(v.buffer) || backend.ends != 1 {
-		t.Fatalf("writes=%d bytes=%d ends=%d", backend.writes, backend.written, backend.ends)
+	if target.writes != 1 || target.written != len(v.buffer) || target.ends != 1 {
+		t.Fatalf("writes=%d bytes=%d ends=%d", target.writes, target.written, target.ends)
 	}
-	if len(backend.capture) != len(v.buffer) {
-		t.Fatalf("captured bytes = %d", len(backend.capture))
+	if len(target.capture) != len(v.buffer) {
+		t.Fatalf("captured bytes = %d", len(target.capture))
 	}
 	for i := range v.buffer {
-		if backend.capture[i] != v.buffer[i] {
+		if target.capture[i] != v.buffer[i] {
 			t.Fatalf("physical transfer differs from completed buffer at byte %d", i)
 		}
 	}
@@ -629,7 +634,7 @@ func TestDirectAndBufferedRendering(t *testing.T) {
 }
 
 func TestBufferedLoopDrawsNextCopy(t *testing.T) {
-	b := &testBackend{width: 20, height: 10}
+	b := &testDisplay{width: 20, height: 10}
 	v := New(b, WithStyles(testStyles())).Viewport()
 	if err := v.SetText("aaaa"); err != nil {
 		t.Fatal(err)
@@ -648,7 +653,7 @@ func TestBufferedLoopDrawsNextCopy(t *testing.T) {
 
 func TestBufferedErrorsKeepDirty(t *testing.T) {
 	want := errors.New("blit failed")
-	b := &testBackend{width: 20, height: 10, writeErr: want}
+	b := &testDisplay{width: 20, height: 10, writeErr: want}
 	v := New(b, WithStyles(testStyles())).Viewport()
 	if err := v.SetText("aaaa"); err != nil {
 		t.Fatal(err)
@@ -658,13 +663,13 @@ func TestBufferedErrorsKeepDirty(t *testing.T) {
 		t.Fatalf("blit error = %v", err)
 	}
 	if !v.dirty {
-		t.Fatal("backend error cleared dirty")
+		t.Fatal("display error cleared dirty")
 	}
 
 	tooWide := false
 	styles := testStyles()
 	styles.Default.Font = testFont{advance: 10, tooWide: &tooWide}
-	v = New(&testBackend{width: 20, height: 10}, WithStyles(styles)).Viewport()
+	v = New(&testDisplay{width: 20, height: 10}, WithStyles(styles)).Viewport()
 	if err := v.SetText("aaaa"); err != nil {
 		t.Fatal(err)
 	}
@@ -679,7 +684,7 @@ func TestBufferedErrorsKeepDirty(t *testing.T) {
 }
 
 func TestBufferedSetTextUpdatesRetainedBuffer(t *testing.T) {
-	v := New(&testBackend{width: 20, height: 10}, WithStyles(testStyles())).Viewport()
+	v := New(&testDisplay{width: 20, height: 10}, WithStyles(testStyles())).Viewport()
 	if err := v.SetText("aaaa"); err != nil {
 		t.Fatal(err)
 	}
@@ -711,7 +716,7 @@ func TestBufferedSetTextUpdatesRetainedBuffer(t *testing.T) {
 }
 
 func TestShortScrolledTextDoesNotUseBuffer(t *testing.T) {
-	b := &testBackend{width: 50, height: 10}
+	b := &testDisplay{width: 50, height: 10}
 	v := New(b, WithStyles(testStyles())).Viewport()
 	if err := v.SetText("a"); err != nil {
 		t.Fatal(err)
@@ -732,18 +737,18 @@ func TestShortScrolledTextDoesNotUseBuffer(t *testing.T) {
 	}
 }
 
-type allocationBackend struct{ remaining int }
+type allocationDisplay struct{ remaining int }
 
-func (*allocationBackend) Size() (int16, int16) { return 20, 10 }
-func (b *allocationBackend) BeginRect(_, _, width, height int16) error {
+func (*allocationDisplay) Size() (int16, int16) { return 20, 10 }
+func (b *allocationDisplay) BeginRect(_, _, width, height int16) error {
 	b.remaining = int(width) * int(height) * 2
 	return nil
 }
-func (b *allocationBackend) WritePixels(data []byte) error { b.remaining -= len(data); return nil }
-func (*allocationBackend) EndRect() error                  { return nil }
+func (b *allocationDisplay) WritePixels(data []byte) error { b.remaining -= len(data); return nil }
+func (*allocationDisplay) EndRect() error                  { return nil }
 
 func TestBufferedSteadyRenderAllocations(t *testing.T) {
-	v := New(&allocationBackend{}, WithStyles(testStyles())).Viewport()
+	v := New(&allocationDisplay{}, WithStyles(testStyles())).Viewport()
 	if err := v.SetText("aaaa"); err != nil {
 		t.Fatal(err)
 	}

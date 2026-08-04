@@ -133,7 +133,7 @@ Glyph Runs
         ↓
 Renderer
         ↓
-Display Backend
+Display output
 ```
 
 ### 4.1 Font Loader

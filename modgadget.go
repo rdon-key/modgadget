@@ -6,14 +6,15 @@ import (
 	"math"
 	"time"
 
-	"github.com/rdon-key/modgadget/internal/display"
+	displaypkg "github.com/rdon-key/modgadget/internal/display"
 	"github.com/rdon-key/modgadget/internal/mgf"
 	"github.com/rdon-key/modgadget/internal/text"
 	"github.com/rdon-key/modgadget/internal/text/markup"
 )
 
-type Backend = display.Backend
-type Color565 = display.Color565
+// Display receives row-major RGB565 pixel data for rectangular display regions.
+type Display = displaypkg.Backend
+type Color565 = displaypkg.Color565
 type Font = text.Font
 type FontStack = text.FontStack
 type MGFFont = text.MGFFont
@@ -24,35 +25,37 @@ type StyleSet = text.StyleSet
 func NewMGFFont(source mgf.Font) MGFFont { return text.NewMGFFont(source) }
 
 const (
-	ColorBlack = display.ColorBlack
-	ColorWhite = display.ColorWhite
-	ColorRed   = display.ColorRed
-	ColorGreen = display.ColorGreen
-	ColorBlue  = display.ColorBlue
+	ColorBlack = displaypkg.ColorBlack
+	ColorWhite = displaypkg.ColorWhite
+	ColorRed   = displaypkg.ColorRed
+	ColorGreen = displaypkg.ColorGreen
+	ColorBlue  = displaypkg.ColorBlue
 )
 
-func RGB565(red, green, blue uint8) Color565 { return display.RGB565(red, green, blue) }
+func RGB565(red, green, blue uint8) Color565 { return displaypkg.RGB565(red, green, blue) }
 
 type Option func(*Gadget)
 
 func WithStyles(styles StyleSet) Option { return func(g *Gadget) { g.styles = styles } }
 
 type Gadget struct {
-	backend      display.Backend
+	display      Display
 	styles       text.StyleSet
 	viewports    []*Viewport
 	clearScratch [64]byte
 }
 
-// Clear fills the entire physical display with the default background color.
+// Clear fills the entire Display, as reported by Display.Size, with the default
+// background color. It does not change Viewport content or dirty state, and it
+// returns Display transfer errors.
 func (g *Gadget) Clear() error {
-	if g == nil || g.backend == nil {
-		return fmt.Errorf("modgadget: clear display: %w", display.ErrNilBackend)
+	if g == nil || g.display == nil {
+		return fmt.Errorf("modgadget: display is nil")
 	}
-	width, height := g.backend.Size()
-	if err := display.FillRect(
-		g.backend,
-		display.Rect{Width: width, Height: height},
+	width, height := g.display.Size()
+	if err := displaypkg.FillRect(
+		g.display,
+		displaypkg.Rect{Width: width, Height: height},
 		g.styles.Default.Background,
 		g.clearScratch[:],
 	); err != nil {
@@ -61,8 +64,9 @@ func (g *Gadget) Clear() error {
 	return nil
 }
 
-func New(backend Backend, options ...Option) *Gadget {
-	g := &Gadget{backend: backend}
+// New creates a Gadget that renders to display.
+func New(display Display, options ...Option) *Gadget {
+	g := &Gadget{display: display}
 	for _, option := range options {
 		if option != nil {
 			option(g)
@@ -74,7 +78,7 @@ func New(backend Backend, options ...Option) *Gadget {
 type ViewportOption func(*Viewport)
 
 func Bounds(x, y, width, height int16) ViewportOption {
-	return func(v *Viewport) { v.bounds = display.Rect{X: x, Y: y, Width: width, Height: height} }
+	return func(v *Viewport) { v.bounds = displaypkg.Rect{X: x, Y: y, Width: width, Height: height} }
 }
 
 type ScrollOption func(*horizontalScroll)
@@ -105,15 +109,15 @@ func ScrollFromRight() ScrollOption {
 
 type Viewport struct {
 	owner          *Gadget
-	bounds         display.Rect
+	bounds         displaypkg.Rect
 	text           string
 	layout         text.TextLayout
 	textWidth      int16
 	scratch        []byte
 	fillScratch    [64]byte
 	buffer         []byte
-	surface        *display.Surface
-	surfaceBackend *display.ViewportBackend
+	surface        *displaypkg.Surface
+	surfaceBackend *displaypkg.ViewportBackend
 	dirty          bool
 	parseErr       error
 	scroll         horizontalScroll
@@ -126,9 +130,9 @@ type Viewport struct {
 
 func (g *Gadget) Viewport(options ...ViewportOption) *Viewport {
 	v := &Viewport{owner: g, dirty: true}
-	if g != nil && g.backend != nil {
-		width, height := g.backend.Size()
-		v.bounds = display.Rect{Width: width, Height: height}
+	if g != nil && g.display != nil {
+		width, height := g.display.Size()
+		v.bounds = displaypkg.Rect{Width: width, Height: height}
 	}
 	for _, option := range options {
 		if option != nil {
@@ -299,13 +303,15 @@ func (v *Viewport) update(now time.Time) {
 	}
 }
 
+// Render draws dirty Viewports to the Display in registration order and returns
+// the first Display transfer or drawing error.
 func (g *Gadget) Render() error {
-	if g == nil || g.backend == nil {
-		return fmt.Errorf("modgadget: %w", display.ErrNilBackend)
+	if g == nil || g.display == nil {
+		return fmt.Errorf("modgadget: display is nil")
 	}
 	for _, v := range g.viewports {
 		if v.dirty {
-			if err := v.render(g.backend); err != nil {
+			if err := v.render(g.display); err != nil {
 				return err
 			}
 			v.dirty = false
@@ -314,26 +320,26 @@ func (g *Gadget) Render() error {
 	return nil
 }
 
-func (v *Viewport) render(backend display.Backend) error {
+func (v *Viewport) render(target Display) error {
 	if v.parseErr != nil {
 		return v.parseErr
 	}
 	if v.scrollEnabled && v.scroll.speed > 0 && (v.scroll.oneShot() || v.textWidth > v.bounds.Width) {
-		return v.renderBuffered(backend)
+		return v.renderBuffered(target)
 	}
-	return v.renderDirect(backend)
+	return v.renderDirect(target)
 }
 
-func (v *Viewport) renderDirect(backend display.Backend) error {
-	low, err := display.NewViewport(v.bounds)
+func (v *Viewport) renderDirect(target Display) error {
+	low, err := displaypkg.NewViewport(v.bounds)
 	if err != nil {
 		return fmt.Errorf("modgadget: viewport: %w", err)
 	}
-	clipped, err := display.NewViewportBackend(backend, low)
+	clipped, err := displaypkg.NewViewportBackend(target, low)
 	if err != nil {
-		return fmt.Errorf("modgadget: viewport backend: %w", err)
+		return fmt.Errorf("modgadget: viewport display adapter: %w", err)
 	}
-	if err := display.FillRect(clipped, display.Rect{Width: v.bounds.Width, Height: v.bounds.Height}, v.owner.styles.Default.Background, v.fillScratch[:]); err != nil {
+	if err := displaypkg.FillRect(clipped, displaypkg.Rect{Width: v.bounds.Width, Height: v.bounds.Height}, v.owner.styles.Default.Background, v.fillScratch[:]); err != nil {
 		return fmt.Errorf("modgadget: clear viewport: %w", err)
 	}
 	if v.text == "" {
@@ -342,11 +348,11 @@ func (v *Viewport) renderDirect(backend display.Backend) error {
 	return v.drawText(clipped)
 }
 
-func (v *Viewport) renderBuffered(backend display.Backend) error {
+func (v *Viewport) renderBuffered(target Display) error {
 	if err := v.ensureSurface(); err != nil {
 		return err
 	}
-	if err := display.FillRect(v.surface, display.Rect{Width: v.bounds.Width, Height: v.bounds.Height}, v.owner.styles.Default.Background, v.fillScratch[:]); err != nil {
+	if err := displaypkg.FillRect(v.surface, displaypkg.Rect{Width: v.bounds.Width, Height: v.bounds.Height}, v.owner.styles.Default.Background, v.fillScratch[:]); err != nil {
 		return fmt.Errorf("modgadget: clear viewport buffer: %w", err)
 	}
 	if v.text != "" && !(v.scroll.oneShot() && v.finished) {
@@ -354,7 +360,7 @@ func (v *Viewport) renderBuffered(backend display.Backend) error {
 			return err
 		}
 	}
-	if err := v.surface.BlitTo(backend, v.bounds.X, v.bounds.Y); err != nil {
+	if err := v.surface.BlitTo(target, v.bounds.X, v.bounds.Y); err != nil {
 		return fmt.Errorf("modgadget: blit viewport buffer: %w", err)
 	}
 	return nil
@@ -369,33 +375,33 @@ func (v *Viewport) ensureSurface() error {
 		return fmt.Errorf("modgadget: viewport buffer dimensions must be positive")
 	}
 	v.buffer = make([]byte, required)
-	surface, err := display.NewSurface(v.bounds.Width, v.bounds.Height, v.buffer)
+	surface, err := displaypkg.NewSurface(v.bounds.Width, v.bounds.Height, v.buffer)
 	if err != nil {
 		return fmt.Errorf("modgadget: create viewport surface: %w", err)
 	}
-	local, err := display.NewViewport(display.Rect{Width: v.bounds.Width, Height: v.bounds.Height})
+	local, err := displaypkg.NewViewport(displaypkg.Rect{Width: v.bounds.Width, Height: v.bounds.Height})
 	if err != nil {
 		return fmt.Errorf("modgadget: create buffered viewport: %w", err)
 	}
-	clipped, err := display.NewViewportBackend(surface, local)
+	clipped, err := displaypkg.NewViewportBackend(surface, local)
 	if err != nil {
-		return fmt.Errorf("modgadget: create buffered viewport backend: %w", err)
+		return fmt.Errorf("modgadget: create buffered viewport display adapter: %w", err)
 	}
 	v.surface, v.surfaceBackend = surface, clipped
 	return nil
 }
 
-func (v *Viewport) drawText(backend display.Backend) error {
+func (v *Viewport) drawText(target Display) error {
 	measurement := v.layout.Measurement()
 	baseline := int16(-int32(measurement.Bounds.MinY))
 	penX := -v.offset
-	if _, err := v.layout.Draw(backend, penX, baseline, v.scratch); err != nil {
+	if _, err := v.layout.Draw(target, penX, baseline, v.scratch); err != nil {
 		return fmt.Errorf("modgadget: draw text: %w", err)
 	}
 	if v.scroll.loop && !v.scroll.oneShot() && v.scrollEnabled && v.textWidth > v.bounds.Width {
 		next := int32(penX) + int32(v.textWidth) + int32(v.scroll.gap)
 		if next <= math.MaxInt16 && next >= math.MinInt16 {
-			if _, err := v.layout.Draw(backend, int16(next), baseline, v.scratch); err != nil {
+			if _, err := v.layout.Draw(target, int16(next), baseline, v.scratch); err != nil {
 				return fmt.Errorf("modgadget: draw loop text: %w", err)
 			}
 		}
