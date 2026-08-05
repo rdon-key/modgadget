@@ -76,3 +76,41 @@ func TestPatternStepsRejectsUnknownPattern(t *testing.T) {
 		}
 	}
 }
+
+func TestCorrectPatternContentAndDuration(t *testing.T) {
+	steps := patternSteps(PatternCorrect)
+	if len(steps) != 3 {
+		t.Fatalf("PatternCorrect steps=%d want=3", len(steps))
+	}
+	want := [...]patternStep{
+		{kind: stepTone, frequency: CorrectFirstFrequencyHz, frames: CorrectFirstToneFrames},
+		{kind: stepSilence, frames: CorrectGapFrames},
+		{kind: stepTone, frequency: CorrectSecondFrequencyHz, frames: CorrectSecondToneFrames},
+	}
+	for index := range want {
+		if steps[index] != want[index] {
+			t.Errorf("PatternCorrect step[%d]=%+v want=%+v", index, steps[index], want[index])
+		}
+	}
+	totalFrames := CorrectFirstToneFrames + CorrectGapFrames + CorrectSecondToneFrames
+	if totalFrames != uint32(SampleRate*660/1000) {
+		t.Fatalf("PatternCorrect total frames=%d want=%d", totalFrames, SampleRate*660/1000)
+	}
+	if totalFrames >= SampleRate {
+		t.Fatalf("PatternCorrect is not a short effect: %d frames", totalFrames)
+	}
+}
+
+func TestWrongPatternContent(t *testing.T) {
+	steps := patternSteps(PatternWrong)
+	if len(steps) != 1 {
+		t.Fatalf("PatternWrong steps=%d want=1", len(steps))
+	}
+	want := patternStep{kind: stepTone, frequency: WrongFrequencyHz, frames: WrongToneFrames}
+	if steps[0] != want {
+		t.Fatalf("PatternWrong step=%+v want=%+v", steps[0], want)
+	}
+	if len(steps) == len(correctPattern) {
+		t.Fatal("PatternWrong unexpectedly returned Correct pattern")
+	}
+}

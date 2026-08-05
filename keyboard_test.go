@@ -12,6 +12,16 @@ type fakeKeyboard struct {
 	reads  int
 }
 
+type fakeVolumeController struct {
+	ups, downs, toggles int
+}
+
+func (controller *fakeVolumeController) VolumeUp()   { controller.ups++ }
+func (controller *fakeVolumeController) VolumeDown() { controller.downs++ }
+func (controller *fakeVolumeController) ToggleMute() { controller.toggles++ }
+
+var _ VolumeController = (*fakeVolumeController)(nil)
+
 var _ Keyboard = (*fakeKeyboard)(nil)
 
 func (keyboard *fakeKeyboard) ReadKeyEvent() (KeyEvent, bool) {
@@ -54,6 +64,197 @@ func TestKeyboardOptionalAndDrain(t *testing.T) {
 	}
 	if !(ModShift | ModControl).Has(ModShift | ModControl) {
 		t.Fatal("Has did not recognize multiple bits")
+	}
+}
+
+func TestSystemVolumeShortcutsConsumeBeforeHandlers(t *testing.T) {
+	controller := &fakeVolumeController{}
+	keyboard := &fakeKeyboard{}
+	keyboard.events = [8]KeyEvent{}
+	// fakeKeyboard has room for eight events; exercise the three shortcuts,
+	// releases, missing Fn, and an unrelated Fn key in those slots.
+	keyboard.count = 8
+	keyboard.events[0] = KeyEvent{Code: KeyF12, Action: KeyDown, Modifiers: ModFn}
+	keyboard.events[1] = KeyEvent{Code: KeyF11, Action: KeyDown, Modifiers: ModFn | ModShift}
+	keyboard.events[2] = KeyEvent{Code: KeyM, Action: KeyDown, Modifiers: ModFn | ModControl}
+	keyboard.events[3] = KeyEvent{Code: KeyF12, Action: KeyUp, Modifiers: ModFn}
+	keyboard.events[4] = KeyEvent{Code: KeyF11, Action: KeyDown}
+	keyboard.events[5] = KeyEvent{Code: KeyM, Action: KeyUp, Modifiers: ModFn}
+	keyboard.events[6] = KeyEvent{Code: KeyQ, Action: KeyDown, Modifiers: ModFn}
+	keyboard.events[7] = KeyEvent{Code: KeyM, Action: KeyDown}
+
+	g := New(nil, WithKeyboard(keyboard), WithVolumeController(controller))
+	delivered := make([]KeyEvent, 0, 5)
+	g.OnKey(func(event KeyEvent) bool {
+		delivered = append(delivered, event)
+		return false
+	})
+	g.Update(time.Time{})
+	if controller.ups != 1 || controller.downs != 1 || controller.toggles != 1 {
+		t.Fatalf("volume calls up=%d down=%d toggle=%d", controller.ups, controller.downs, controller.toggles)
+	}
+	if len(delivered) != 3 {
+		t.Fatalf("delivered=%#v", delivered)
+	}
+	if delivered[1].Code != KeyQ || !delivered[1].Modifiers.Has(ModFn) {
+		t.Fatalf("unrelated Fn event=%#v", delivered[1])
+	}
+}
+
+func TestSystemVolumeShortcutsWithoutControllerAreDelivered(t *testing.T) {
+	keyboard := &fakeKeyboard{count: 6}
+	keyboard.events[0] = KeyEvent{Code: KeyF12, Action: KeyDown, Modifiers: ModFn}
+	keyboard.events[1] = KeyEvent{Code: KeyF12, Action: KeyUp}
+	keyboard.events[2] = KeyEvent{Code: KeyF11, Action: KeyDown, Modifiers: ModFn}
+	keyboard.events[3] = KeyEvent{Code: KeyF11, Action: KeyUp}
+	keyboard.events[4] = KeyEvent{Code: KeyM, Action: KeyDown, Modifiers: ModFn}
+	keyboard.events[5] = KeyEvent{Code: KeyM, Action: KeyUp}
+	g := New(nil, WithKeyboard(keyboard), WithVolumeController(nil))
+	delivered := 0
+	g.OnKey(func(KeyEvent) bool { delivered++; return false })
+	g.Update(time.Time{})
+	if delivered != 6 {
+		t.Fatalf("delivered=%d want=6", delivered)
+	}
+}
+
+func TestSystemVolumeShortcutCapturesDownAndUp(t *testing.T) {
+	tests := []struct {
+		name string
+		code KeyCode
+		want fakeVolumeController
+	}{
+		{name: "volume down", code: KeyF11, want: fakeVolumeController{downs: 1}},
+		{name: "volume up", code: KeyF12, want: fakeVolumeController{ups: 1}},
+		{name: "mute", code: KeyM, want: fakeVolumeController{toggles: 1}},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			keyboard := &fakeKeyboard{count: 2}
+			keyboard.events[0] = KeyEvent{Code: test.code, Action: KeyDown, Modifiers: ModFn}
+			// Fn may be released before this key, so KeyUp has no ModFn.
+			keyboard.events[1] = KeyEvent{Code: test.code, Action: KeyUp}
+			controller := &fakeVolumeController{}
+			g := New(nil, WithKeyboard(keyboard), WithVolumeController(controller))
+			delivered := 0
+			g.OnKey(func(KeyEvent) bool { delivered++; return false })
+			g.Update(time.Time{})
+			if *controller != test.want {
+				t.Fatalf("controller=%+v want=%+v", *controller, test.want)
+			}
+			if delivered != 0 || g.capturedSystemKeys != 0 {
+				t.Fatalf("delivered=%d captured=%#x", delivered, g.capturedSystemKeys)
+			}
+		})
+	}
+}
+
+func TestSystemVolumeShortcutFnReleasedFirst(t *testing.T) {
+	keyboard := &fakeKeyboard{count: 4}
+	keyboard.events[0] = KeyEvent{Code: KeyFn, Action: KeyDown, Modifiers: ModFn}
+	keyboard.events[1] = KeyEvent{Code: KeyM, Action: KeyDown, Modifiers: ModFn}
+	keyboard.events[2] = KeyEvent{Code: KeyFn, Action: KeyUp}
+	keyboard.events[3] = KeyEvent{Code: KeyM, Action: KeyUp}
+	controller := &fakeVolumeController{}
+	g := New(nil, WithKeyboard(keyboard), WithVolumeController(controller))
+	var delivered [2]KeyEvent
+	count := 0
+	g.OnKey(func(event KeyEvent) bool {
+		delivered[count] = event
+		count++
+		return false
+	})
+	g.Update(time.Time{})
+	if controller.toggles != 1 || count != 2 {
+		t.Fatalf("toggles=%d delivered=%#v count=%d", controller.toggles, delivered, count)
+	}
+	if delivered[0].Code != KeyFn || delivered[0].Action != KeyDown || delivered[1].Code != KeyFn || delivered[1].Action != KeyUp {
+		t.Fatalf("delivered=%#v", delivered)
+	}
+}
+
+func TestSystemVolumeShortcutDuplicateDownAndNormalKey(t *testing.T) {
+	keyboard := &fakeKeyboard{count: 5}
+	keyboard.events[0] = KeyEvent{Code: KeyM, Action: KeyDown, Modifiers: ModFn}
+	keyboard.events[1] = KeyEvent{Code: KeyM, Action: KeyDown, Modifiers: ModFn}
+	keyboard.events[2] = KeyEvent{Code: KeyM, Action: KeyUp}
+	keyboard.events[3] = KeyEvent{Code: KeyM, Action: KeyDown}
+	keyboard.events[4] = KeyEvent{Code: KeyM, Action: KeyUp}
+	controller := &fakeVolumeController{}
+	g := New(nil, WithKeyboard(keyboard), WithVolumeController(controller))
+	var delivered [2]KeyEvent
+	count := 0
+	g.OnKey(func(event KeyEvent) bool { delivered[count] = event; count++; return false })
+	g.Update(time.Time{})
+	if controller.toggles != 1 || count != 2 || delivered[0].Action != KeyDown || delivered[1].Action != KeyUp {
+		t.Fatalf("toggles=%d delivered=%#v count=%d", controller.toggles, delivered, count)
+	}
+	if g.capturedSystemKeys != 0 {
+		t.Fatalf("captured=%#x", g.capturedSystemKeys)
+	}
+}
+
+func TestSystemVolumeShortcutClearsStaleCapture(t *testing.T) {
+	keyboard := &fakeKeyboard{count: 2}
+	keyboard.events[0] = KeyEvent{Code: KeyM, Action: KeyDown}
+	keyboard.events[1] = KeyEvent{Code: KeyM, Action: KeyUp}
+	g := New(nil, WithKeyboard(keyboard), WithVolumeController(&fakeVolumeController{}))
+	g.capturedSystemKeys = systemMuteKey
+	delivered := 0
+	g.OnKey(func(KeyEvent) bool { delivered++; return false })
+	g.Update(time.Time{})
+	if delivered != 2 || g.capturedSystemKeys != 0 {
+		t.Fatalf("delivered=%d captured=%#x", delivered, g.capturedSystemKeys)
+	}
+}
+
+func TestSystemVolumeShortcutCompletionLeavesNormalKeysDelivered(t *testing.T) {
+	for _, code := range []KeyCode{KeyF11, KeyF12, KeyM} {
+		keyboard := &fakeKeyboard{count: 4}
+		keyboard.events[0] = KeyEvent{Code: code, Action: KeyDown, Modifiers: ModFn}
+		keyboard.events[1] = KeyEvent{Code: code, Action: KeyUp}
+		keyboard.events[2] = KeyEvent{Code: code, Action: KeyDown}
+		keyboard.events[3] = KeyEvent{Code: code, Action: KeyUp}
+		g := New(nil, WithKeyboard(keyboard), WithVolumeController(&fakeVolumeController{}))
+		var delivered [2]KeyEvent
+		count := 0
+		g.OnKey(func(event KeyEvent) bool { delivered[count] = event; count++; return false })
+		g.Update(time.Time{})
+		if count != 2 || delivered[0].Code != code || delivered[0].Action != KeyDown || delivered[1].Code != code || delivered[1].Action != KeyUp {
+			t.Fatalf("code=%v delivered=%#v count=%d", code, delivered, count)
+		}
+	}
+}
+
+func TestSystemVolumeShortcutAllocations(t *testing.T) {
+	keyboard := &fakeKeyboard{}
+	controller := &fakeVolumeController{}
+	g := New(nil, WithKeyboard(keyboard), WithVolumeController(controller))
+	if allocs := testing.AllocsPerRun(100, func() {
+		keyboard.index, keyboard.count = 0, 2
+		keyboard.events[0] = KeyEvent{Code: KeyF12, Action: KeyDown, Modifiers: ModFn}
+		keyboard.events[1] = KeyEvent{Code: KeyF12, Action: KeyUp}
+		g.Update(time.Time{})
+	}); allocs != 0 {
+		t.Fatalf("system shortcut allocations=%v", allocs)
+	}
+}
+
+type infiniteVolumeKeyboard struct{ reads int }
+
+func (keyboard *infiniteVolumeKeyboard) ReadKeyEvent() (KeyEvent, bool) {
+	keyboard.reads++
+	return KeyEvent{Code: KeyF12, Action: KeyDown, Modifiers: ModFn}, true
+}
+
+func TestSystemVolumeShortcutKeepsKeyboardEventLimit(t *testing.T) {
+	keyboard := &infiniteVolumeKeyboard{}
+	controller := &fakeVolumeController{}
+	g := New(nil, WithKeyboard(keyboard), WithVolumeController(controller))
+	g.Update(time.Time{})
+	if keyboard.reads != maxKeyEventsPerUpdate || controller.ups != 1 || controller.downs != 0 || controller.toggles != 0 {
+		t.Fatalf("reads=%d up=%d down=%d toggle=%d limit=%d",
+			keyboard.reads, controller.ups, controller.downs, controller.toggles, maxKeyEventsPerUpdate)
 	}
 }
 

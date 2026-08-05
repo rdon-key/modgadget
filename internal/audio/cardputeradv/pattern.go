@@ -49,7 +49,7 @@ const (
 
 	CorrectFirstToneFrames  = uint32(SampleRate * 300 / 1000)
 	CorrectGapFrames        = uint32(SampleRate * 100 / 1000)
-	CorrectSecondToneFrames = uint32(SampleRate * 2600 / 1000)
+	CorrectSecondToneFrames = uint32(SampleRate * 260 / 1000)
 )
 
 var startupPattern = [...]patternStep{
@@ -109,9 +109,9 @@ func patternSteps(pattern Pattern) []patternStep {
 	case PatternClick:
 		return clickPattern[:]
 	case PatternWrong:
-		return correctPattern[:]
-	case PatternCorrect:
 		return wrongPattern[:]
+	case PatternCorrect:
+		return correctPattern[:]
 	default:
 		return nil
 	}

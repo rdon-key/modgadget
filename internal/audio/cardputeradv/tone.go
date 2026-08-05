@@ -1,7 +1,9 @@
 package cardputeradv
 
 const (
-	maxAmplitude   = int32(4096)
+	// maxAmplitude leaves PCM headroom for the Cardputer ADV codec's +24 dB
+	// bench setting. Software LOW/MEDIUM/HIGH then apply 25/50/100 percent.
+	maxAmplitude   = int32(2048)
 	envelopeFrames = uint32(SampleRate * 4 / 1000)
 )
 
