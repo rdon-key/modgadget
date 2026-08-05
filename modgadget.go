@@ -41,16 +41,17 @@ type Option func(*Gadget)
 func WithStyles(styles StyleSet) Option { return func(g *Gadget) { g.styles = styles } }
 
 type Gadget struct {
-	display           Display
-	styles            text.StyleSet
-	viewports         []*Viewport
-	clearScratch      [64]byte
-	keyboard          Keyboard
-	volumeController  VolumeController
-	keyListeners      []keyListener
-	nextListener      ListenerID
-	keyDispatchDepth  int
-	keyListenersDirty bool
+	display            Display
+	styles             text.StyleSet
+	viewports          []*Viewport
+	clearScratch       [64]byte
+	keyboard           Keyboard
+	volumeController   VolumeController
+	capturedSystemKeys uint8
+	keyListeners       []keyListener
+	nextListener       ListenerID
+	keyDispatchDepth   int
+	keyListenersDirty  bool
 }
 
 // Clear fills the entire Display, as reported by Display.Size, with the default

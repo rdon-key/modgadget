@@ -134,7 +134,7 @@ func (p *Player) ToggleMute() {
 }
 
 // Muted reports whether software volume is MUTE.
-func (p *Player) Muted() bool { return p != nil && p.volume == VolumeMute }
+func (p *Player) Muted() bool { return p == nil || p.volume == VolumeMute }
 
 // Configure initializes the codec and I2S transmitter and resets playback.
 func (p *Player) Configure() error {

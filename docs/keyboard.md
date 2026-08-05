@@ -205,8 +205,8 @@ Examples:
 
 ### Standard volume keys
 
-When a `VolumeController` is supplied to `Gadget`, these KeyDown shortcuts are
-handled before application listeners:
+When a `VolumeController` is supplied to `Gadget`, these shortcuts are handled
+before application listeners:
 
 ```text
 Fn + =    Volume Up
@@ -215,9 +215,11 @@ Fn + M    Mute / Unmute
 ```
 
 Volume Up and Down stop at HIGH and MUTE rather than wrapping. Unmute restores
-the level active before mute. A handled standard shortcut is consumed and is
-not delivered to `OnKey`. Without a controller, the same KeyEvent is delivered
-normally. Other Fn combinations remain application events.
+the level active before mute. A handled KeyDown performs the operation, and
+both that KeyDown and its corresponding KeyUp are consumed instead of being
+delivered to `OnKey`. The captured KeyUp remains consumed if Fn is released
+first. Without a controller, both events are delivered normally. Other Fn
+combinations remain application events.
 
 ```text
 Volume Up:   MUTE -> LOW -> MEDIUM -> HIGH

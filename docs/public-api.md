@@ -418,10 +418,10 @@ composition or IME conversion. Keyboard input is independent of `Display`.
 See [Keyboard API](keyboard.md) for event fields, handler and listener rules,
 and the Cardputer ADV adapter.
 
-An optional `VolumeController` enables standard KeyDown shortcuts before
-application handlers: Fn+= raises volume, Fn+- lowers it, and Fn+M toggles mute.
-Handled shortcuts are consumed; without a controller they remain ordinary key
-events.
+An optional `VolumeController` enables standard shortcuts before application
+handlers: Fn+= raises volume, Fn+- lowers it, and Fn+M toggles mute. The KeyDown
+performs the operation; both it and its captured KeyUp are consumed, including
+when Fn is released first. Without a controller both remain ordinary key events.
 
 ## Public API reference
 

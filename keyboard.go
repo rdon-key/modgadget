@@ -230,21 +230,66 @@ func WithVolumeController(controller VolumeController) Option {
 	return func(g *Gadget) { g.volumeController = controller }
 }
 
-func (g *Gadget) handleSystemKey(event KeyEvent) bool {
-	if g == nil || g.volumeController == nil || event.Action != KeyDown || !event.Modifiers.Has(ModFn) {
-		return false
-	}
-	switch event.Code {
-	case KeyF12:
-		g.volumeController.VolumeUp()
+const (
+	systemVolumeDownKey uint8 = 1 << iota
+	systemVolumeUpKey
+	systemMuteKey
+)
+
+func systemVolumeKeyBit(code KeyCode) uint8 {
+	switch code {
 	case KeyF11:
-		g.volumeController.VolumeDown()
+		return systemVolumeDownKey
+	case KeyF12:
+		return systemVolumeUpKey
 	case KeyM:
-		g.volumeController.ToggleMute()
+		return systemMuteKey
 	default:
+		return 0
+	}
+}
+
+func (g *Gadget) handleSystemKey(event KeyEvent) bool {
+	if g == nil {
 		return false
 	}
-	return true
+	bit := systemVolumeKeyBit(event.Code)
+	if bit == 0 {
+		return false
+	}
+
+	switch event.Action {
+	case KeyDown:
+		if !event.Modifiers.Has(ModFn) {
+			g.capturedSystemKeys &^= bit
+			return false
+		}
+		if g.volumeController == nil {
+			return false
+		}
+		if g.capturedSystemKeys&bit != 0 {
+			return true
+		}
+		g.capturedSystemKeys |= bit
+		switch event.Code {
+		case KeyF12:
+			g.volumeController.VolumeUp()
+		case KeyF11:
+			g.volumeController.VolumeDown()
+		case KeyM:
+			g.volumeController.ToggleMute()
+		}
+		return true
+
+	case KeyUp:
+		if g.capturedSystemKeys&bit == 0 {
+			return false
+		}
+		g.capturedSystemKeys &^= bit
+		return true
+	}
+
+	return false
 }
 
 // OnKey registers handler and returns its ListenerID.

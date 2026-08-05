@@ -50,6 +50,9 @@ func TestVolumeNilReceiver(t *testing.T) {
 	if player.Volume() != VolumeMute {
 		t.Fatalf("nil Volume=%v want MUTE zero value", player.Volume())
 	}
+	if !player.Muted() {
+		t.Fatal("nil Player is not reported as muted")
+	}
 }
 
 func TestInvalidVolumeDoesNotChangeCurrentLevel(t *testing.T) {
