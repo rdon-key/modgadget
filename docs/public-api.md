@@ -418,6 +418,11 @@ composition or IME conversion. Keyboard input is independent of `Display`.
 See [Keyboard API](keyboard.md) for event fields, handler and listener rules,
 and the Cardputer ADV adapter.
 
+An optional `VolumeController` enables standard KeyDown shortcuts before
+application handlers: Fn+= raises volume, Fn+- lowers it, and Fn+M toggles mute.
+Handled shortcuts are consumed; without a controller they remain ordinary key
+events.
+
 ## Public API reference
 
 Only identifiers currently exported by the root package are listed here.
@@ -508,6 +513,7 @@ Only identifiers currently exported by the root package are listed here.
 | `type Option func(*Gadget)` | Gadget option | Nil options are ignored |
 | `func WithStyles(styles StyleSet) Option` | Supplies Styles | Applied during New |
 | `func WithKeyboard(keyboard Keyboard) Option` | Supplies a key-event source | Nil means no Keyboard |
+| `func WithVolumeController(controller VolumeController) Option` | Enables standard volume shortcuts | Nil disables system volume handling |
 | `type ViewportOption func(*Viewport)` | Viewport option | Nil options are ignored |
 
 ### Keyboard
@@ -515,6 +521,7 @@ Only identifiers currently exported by the root package are listed here.
 | Signature | Description | Error and notes |
 | --- | --- | --- |
 | `type Keyboard interface { ReadKeyEvent() (KeyEvent, bool) }` | Queued direct key source | Empty is false, not an error |
+| `type VolumeController interface { VolumeUp(); VolumeDown(); ToggleMute() }` | Minimal system volume target | Independent from a concrete audio device |
 | `type KeyEvent struct { Code KeyCode; Rune rune; Action KeyAction; Modifiers Modifiers }` | Logical key transition after layer mapping | Rune is one direct printable character |
 | `type KeyCode uint16` | Layer-applied logical key identity | Standard values follow USB HID usages |
 | `type KeyAction uint8` | Unknown, press, or release | Zero is unknown; no repeat action |

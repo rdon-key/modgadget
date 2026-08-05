@@ -46,6 +46,7 @@ type Gadget struct {
 	viewports         []*Viewport
 	clearScratch      [64]byte
 	keyboard          Keyboard
+	volumeController  VolumeController
 	keyListeners      []keyListener
 	nextListener      ListenerID
 	keyDispatchDepth  int
@@ -230,7 +231,9 @@ func (g *Gadget) Update(now time.Time) {
 			if !ok {
 				break
 			}
-			g.dispatchKey(event)
+			if !g.handleSystemKey(event) {
+				g.dispatchKey(event)
+			}
 		}
 	}
 	for _, v := range g.viewports {

@@ -183,16 +183,17 @@ state recovery after event loss.
 
 The adapter follows M5Stack's
 [`M5Cardputer` Keyboard map](https://github.com/m5stack/M5Cardputer/blob/master/src/utility/Keyboard/Keyboard.h).
-Aa changes printable Rune while Fn selects another logical Code. Fn-layer keys
-with `None` produce no event. TCA8418 register meanings follow the
+Aa changes printable Rune while Fn selects another logical Code. When a key has
+no dedicated Fn mapping, it still produces its base Code with `ModFn` and a zero
+Rune. TCA8418 register meanings follow the
 [Texas Instruments TCA8418 datasheet](https://www.ti.com/lit/ds/symlink/tca8418.pdf).
 
 | Physical row | Normal | Aa/Shift | Fn |
 | --- | --- | --- | --- |
 | Top | `` ` 1 2 3 4 5 6 7 8 9 0 - = Backspace `` | `~ ! @ # $ % ^ & * ( ) _ + Backspace` | `Escape F1 F2 F3 F4 F5 F6 F7 F8 F9 F10 F11 F12 Delete` |
-| QWERTY | `Tab q w e r t y u i o p [ ] \` | `Tab Q W E R T Y U I O P { } \|` | `None` for all keys |
-| Home | `Fn Aa a s d f g h j k l ; ' Enter` | `Fn Aa A S D F G H J K L : " Enter` | `Fn None None None None None None None None None None ArrowUp None None` |
-| Bottom | `Control Opt Alt z x c v b n m , . / Space` | `Control Opt Alt Z X C V B N M < > ? Space` | `None None None None None None None None None None ArrowLeft ArrowDown ArrowRight None` |
+| QWERTY | `Tab q w e r t y u i o p [ ] \` | `Tab Q W E R T Y U I O P { } \|` | Base Code with Rune zero |
+| Home | `Fn Aa a s d f g h j k l ; ' Enter` | `Fn Aa A S D F G H J K L : " Enter` | Base Code with Rune zero; semicolon is ArrowUp |
+| Bottom | `Control Opt Alt z x c v b n m , . / Space` | `Control Opt Alt Z X C V B N M < > ? Space` | Base Code with Rune zero; comma/period/slash are arrows |
 
 Examples:
 
@@ -200,6 +201,28 @@ Examples:
 - Fn+1: `Code=KeyF1`, `Rune=0`, `Modifiers=ModFn`.
 - Fn+semicolon/comma/period/slash produces ArrowUp/Left/Down/Right.
 - Fn+Backspace produces `KeyDelete`.
+- Fn+M produces `Code=KeyM`, `Rune=0`, `Modifiers=ModFn`.
+
+### Standard volume keys
+
+When a `VolumeController` is supplied to `Gadget`, these KeyDown shortcuts are
+handled before application listeners:
+
+```text
+Fn + =    Volume Up
+Fn + -    Volume Down
+Fn + M    Mute / Unmute
+```
+
+Volume Up and Down stop at HIGH and MUTE rather than wrapping. Unmute restores
+the level active before mute. A handled standard shortcut is consumed and is
+not delivered to `OnKey`. Without a controller, the same KeyEvent is delivered
+normally. Other Fn combinations remain application events.
+
+```text
+Volume Up:   MUTE -> LOW -> MEDIUM -> HIGH
+Volume Down: HIGH -> MEDIUM -> LOW -> MUTE
+```
 
 The logical Code selected at KeyDown is saved per physical key. KeyUp reuses
 that Code even if Fn or Aa was released first. Every KeyUp has Rune zero.

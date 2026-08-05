@@ -12,6 +12,16 @@ type fakeKeyboard struct {
 	reads  int
 }
 
+type fakeVolumeController struct {
+	ups, downs, toggles int
+}
+
+func (controller *fakeVolumeController) VolumeUp()   { controller.ups++ }
+func (controller *fakeVolumeController) VolumeDown() { controller.downs++ }
+func (controller *fakeVolumeController) ToggleMute() { controller.toggles++ }
+
+var _ VolumeController = (*fakeVolumeController)(nil)
+
 var _ Keyboard = (*fakeKeyboard)(nil)
 
 func (keyboard *fakeKeyboard) ReadKeyEvent() (KeyEvent, bool) {
@@ -54,6 +64,85 @@ func TestKeyboardOptionalAndDrain(t *testing.T) {
 	}
 	if !(ModShift | ModControl).Has(ModShift | ModControl) {
 		t.Fatal("Has did not recognize multiple bits")
+	}
+}
+
+func TestSystemVolumeShortcutsConsumeBeforeHandlers(t *testing.T) {
+	controller := &fakeVolumeController{}
+	keyboard := &fakeKeyboard{}
+	keyboard.events = [8]KeyEvent{}
+	// fakeKeyboard has room for eight events; exercise the three shortcuts,
+	// releases, missing Fn, and an unrelated Fn key in those slots.
+	keyboard.count = 8
+	keyboard.events[0] = KeyEvent{Code: KeyF12, Action: KeyDown, Modifiers: ModFn}
+	keyboard.events[1] = KeyEvent{Code: KeyF11, Action: KeyDown, Modifiers: ModFn | ModShift}
+	keyboard.events[2] = KeyEvent{Code: KeyM, Action: KeyDown, Modifiers: ModFn | ModControl}
+	keyboard.events[3] = KeyEvent{Code: KeyF12, Action: KeyUp, Modifiers: ModFn}
+	keyboard.events[4] = KeyEvent{Code: KeyF11, Action: KeyDown}
+	keyboard.events[5] = KeyEvent{Code: KeyM, Action: KeyUp, Modifiers: ModFn}
+	keyboard.events[6] = KeyEvent{Code: KeyQ, Action: KeyDown, Modifiers: ModFn}
+	keyboard.events[7] = KeyEvent{Code: KeyM, Action: KeyDown}
+
+	g := New(nil, WithKeyboard(keyboard), WithVolumeController(controller))
+	delivered := make([]KeyEvent, 0, 5)
+	g.OnKey(func(event KeyEvent) bool {
+		delivered = append(delivered, event)
+		return false
+	})
+	g.Update(time.Time{})
+	if controller.ups != 1 || controller.downs != 1 || controller.toggles != 1 {
+		t.Fatalf("volume calls up=%d down=%d toggle=%d", controller.ups, controller.downs, controller.toggles)
+	}
+	if len(delivered) != 5 {
+		t.Fatalf("delivered=%#v", delivered)
+	}
+	if delivered[3].Code != KeyQ || !delivered[3].Modifiers.Has(ModFn) {
+		t.Fatalf("unrelated Fn event=%#v", delivered[3])
+	}
+}
+
+func TestSystemVolumeShortcutsWithoutControllerAreDelivered(t *testing.T) {
+	keyboard := &fakeKeyboard{count: 3}
+	keyboard.events[0] = KeyEvent{Code: KeyF12, Action: KeyDown, Modifiers: ModFn}
+	keyboard.events[1] = KeyEvent{Code: KeyF11, Action: KeyDown, Modifiers: ModFn}
+	keyboard.events[2] = KeyEvent{Code: KeyM, Action: KeyDown, Modifiers: ModFn}
+	g := New(nil, WithKeyboard(keyboard), WithVolumeController(nil))
+	delivered := 0
+	g.OnKey(func(KeyEvent) bool { delivered++; return false })
+	g.Update(time.Time{})
+	if delivered != 3 {
+		t.Fatalf("delivered=%d want=3", delivered)
+	}
+}
+
+func TestSystemVolumeShortcutAllocations(t *testing.T) {
+	keyboard := &fakeKeyboard{}
+	controller := &fakeVolumeController{}
+	g := New(nil, WithKeyboard(keyboard), WithVolumeController(controller))
+	if allocs := testing.AllocsPerRun(100, func() {
+		keyboard.index, keyboard.count = 0, 1
+		keyboard.events[0] = KeyEvent{Code: KeyF12, Action: KeyDown, Modifiers: ModFn}
+		g.Update(time.Time{})
+	}); allocs != 0 {
+		t.Fatalf("system shortcut allocations=%v", allocs)
+	}
+}
+
+type infiniteVolumeKeyboard struct{ reads int }
+
+func (keyboard *infiniteVolumeKeyboard) ReadKeyEvent() (KeyEvent, bool) {
+	keyboard.reads++
+	return KeyEvent{Code: KeyF12, Action: KeyDown, Modifiers: ModFn}, true
+}
+
+func TestSystemVolumeShortcutKeepsKeyboardEventLimit(t *testing.T) {
+	keyboard := &infiniteVolumeKeyboard{}
+	controller := &fakeVolumeController{}
+	g := New(nil, WithKeyboard(keyboard), WithVolumeController(controller))
+	g.Update(time.Time{})
+	if keyboard.reads != maxKeyEventsPerUpdate || controller.ups != maxKeyEventsPerUpdate || controller.downs != 0 || controller.toggles != 0 {
+		t.Fatalf("reads=%d up=%d down=%d toggle=%d limit=%d",
+			keyboard.reads, controller.ups, controller.downs, controller.toggles, maxKeyEventsPerUpdate)
 	}
 }
 

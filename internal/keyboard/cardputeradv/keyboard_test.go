@@ -129,6 +129,64 @@ func TestLayeredDownUpCodeConsistency(t *testing.T) {
 	}
 }
 
+func TestFnUnassignedKeysUseBaseCodeAndZeroRune(t *testing.T) {
+	tests := []struct {
+		name string
+		key  byte
+		code modgadget.KeyCode
+	}{
+		{"M", 48, modgadget.KeyM},
+		{"V", 34, modgadget.KeyV},
+		{"Q", 6, modgadget.KeyQ},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			keyboard := New(&registerBus{})
+			press(keyboard, 3)
+			down := press(keyboard, test.key)
+			if down.Code != test.code || down.Rune != 0 || down.Action != modgadget.KeyDown || !down.Modifiers.Has(modgadget.ModFn) {
+				t.Fatalf("Fn+%s down=%#v", test.name, down)
+			}
+			keyboard.processRaw(3) // release Fn before the base key
+			drain(keyboard)
+			keyboard.processRaw(test.key)
+			up := drain(keyboard)
+			if len(up) != 1 || up[0].Code != test.code || up[0].Rune != 0 || up[0].Action != modgadget.KeyUp {
+				t.Fatalf("Fn+%s up=%#v", test.name, up)
+			}
+		})
+	}
+}
+
+func TestFnSystemAndDedicatedMappings(t *testing.T) {
+	tests := []struct {
+		name string
+		key  byte
+		code modgadget.KeyCode
+	}{
+		{"1", 5, modgadget.KeyF1},
+		{"minus", 55, modgadget.KeyF11},
+		{"equal", 61, modgadget.KeyF12},
+		{"semicolon", 57, modgadget.KeyArrowUp},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			keyboard := New(&registerBus{})
+			press(keyboard, 3)
+			event := press(keyboard, test.key)
+			if event.Code != test.code || event.Rune != 0 || !event.Modifiers.Has(modgadget.ModFn) {
+				t.Fatalf("Fn+%s=%#v", test.name, event)
+			}
+		})
+	}
+
+	keyboard := New(&registerBus{})
+	event := press(keyboard, 48)
+	if event.Code != modgadget.KeyM || event.Rune != 'm' || event.Modifiers != 0 {
+		t.Fatalf("normal M=%#v", event)
+	}
+}
+
 func TestModifierEventStateAndMultipleModifiers(t *testing.T) {
 	keyboard := New(&registerBus{})
 	tests := []struct {

@@ -33,22 +33,108 @@ type pcmDevice interface {
 
 // Player cooperatively generates and submits tone PCM.
 type Player struct {
-	device        pcmDevice
-	buffer        [BufferBytes]byte
-	tone          tone
-	configured    bool
-	flushPending  bool
-	releaseFrames uint32
-	draining      bool
-	pattern       Pattern
-	stepIndex     uint8
-	stepRemaining uint32
+	device            pcmDevice
+	buffer            [BufferBytes]byte
+	tone              tone
+	configured        bool
+	flushPending      bool
+	releaseFrames     uint32
+	draining          bool
+	pattern           Pattern
+	stepIndex         uint8
+	stepRemaining     uint32
+	volume            VolumeLevel
+	previousVolume    VolumeLevel
+	hasPreviousVolume bool
 }
 
 // New returns a Player connected to the Cardputer ADV audio hardware.
 func New() *Player { return newPlayer(newPCMDevice()) }
 
-func newPlayer(device pcmDevice) *Player { return &Player{device: device} }
+func newPlayer(device pcmDevice) *Player {
+	return &Player{device: device, volume: VolumeMedium}
+}
+
+// SetVolume changes the software gain used by subsequent PCM submissions.
+func (p *Player) SetVolume(level VolumeLevel) error {
+	if p == nil {
+		return ErrNotConfigured
+	}
+	if level > VolumeHigh {
+		return ErrInvalidVolume
+	}
+	if level == VolumeMute {
+		if p.volume != VolumeMute {
+			p.previousVolume = p.volume
+			p.hasPreviousVolume = true
+		}
+	} else {
+		p.previousVolume = level
+		p.hasPreviousVolume = true
+	}
+	p.volume = level
+	return nil
+}
+
+// Volume returns the current software gain level.
+func (p *Player) Volume() VolumeLevel {
+	if p == nil {
+		return VolumeMute
+	}
+	return p.volume
+}
+
+// VolumeUp raises software volume by one level and stops at HIGH.
+func (p *Player) VolumeUp() {
+	if p == nil || p.volume == VolumeHigh {
+		return
+	}
+	_ = p.SetVolume(p.volume + 1)
+}
+
+// VolumeDown lowers software volume by one level and stops at MUTE.
+func (p *Player) VolumeDown() {
+	if p == nil || p.volume == VolumeMute {
+		return
+	}
+	_ = p.SetVolume(p.volume - 1)
+}
+
+// Mute stores the current non-mute level and selects MUTE.
+func (p *Player) Mute() {
+	if p == nil || p.volume == VolumeMute {
+		return
+	}
+	_ = p.SetVolume(VolumeMute)
+}
+
+// Unmute restores the most recently selected non-mute level, or MEDIUM when
+// no such level has been selected.
+func (p *Player) Unmute() {
+	if p == nil || p.volume != VolumeMute {
+		return
+	}
+	level := VolumeMedium
+	if p.hasPreviousVolume && p.previousVolume > VolumeMute && p.previousVolume <= VolumeHigh {
+		level = p.previousVolume
+	}
+	_ = p.SetVolume(level)
+}
+
+// ToggleMute switches between MUTE and the previous non-mute level.
+func (p *Player) ToggleMute() {
+	if p == nil {
+		return
+	}
+	if p.Muted() {
+		p.Unmute()
+	} else {
+		p.Mute()
+	}
+}
+
+// Muted reports whether software volume is MUTE.
+func (p *Player) Muted() bool { return p != nil && p.volume == VolumeMute }
 
 // Configure initializes the codec and I2S transmitter and resets playback.
 func (p *Player) Configure() error {
@@ -128,7 +214,7 @@ func (p *Player) Update() error {
 		}
 
 		written := p.fillPatternChunk(steps[p.stepIndex])
-		if err := p.device.WritePCM(p.buffer[:]); err != nil {
+		if err := p.writeBuffer(); err != nil {
 			p.stopAfterError()
 			return fmt.Errorf("cardputeradv audio: write pattern: %w", err)
 		}
@@ -148,7 +234,7 @@ func (p *Player) Update() error {
 
 	case p.tone.active():
 		written := p.tone.fill(p.buffer[:])
-		if err := p.device.WritePCM(p.buffer[:]); err != nil {
+		if err := p.writeBuffer(); err != nil {
 			p.stopAfterError()
 			return fmt.Errorf("cardputeradv audio: write tone: %w", err)
 		}
@@ -167,7 +253,7 @@ func (p *Player) Update() error {
 		}
 
 		p.silenceBuffer()
-		if err := p.device.WritePCM(p.buffer[:]); err != nil {
+		if err := p.writeBuffer(); err != nil {
 			p.stopAfterError()
 			return fmt.Errorf("cardputeradv audio: flush silence: %w", err)
 		}
@@ -271,4 +357,9 @@ func (p *Player) silenceBuffer() {
 	for i := range p.buffer {
 		p.buffer[i] = 0
 	}
+}
+
+func (p *Player) writeBuffer() error {
+	applyVolumePCM(p.buffer[:], p.volume)
+	return p.device.WritePCM(p.buffer[:])
 }

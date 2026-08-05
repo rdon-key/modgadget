@@ -5,6 +5,13 @@ type Keyboard interface {
 	ReadKeyEvent() (KeyEvent, bool)
 }
 
+// VolumeController handles the standard system volume operations.
+type VolumeController interface {
+	VolumeUp()
+	VolumeDown()
+	ToggleMute()
+}
+
 // KeyEvent describes one physical key transition.
 type KeyEvent struct {
 	Code      KeyCode
@@ -216,6 +223,28 @@ type keyListener struct {
 // WithKeyboard sets the keyboard event source used by Gadget.Update.
 func WithKeyboard(keyboard Keyboard) Option {
 	return func(g *Gadget) { g.keyboard = keyboard }
+}
+
+// WithVolumeController enables standard volume shortcuts for controller.
+func WithVolumeController(controller VolumeController) Option {
+	return func(g *Gadget) { g.volumeController = controller }
+}
+
+func (g *Gadget) handleSystemKey(event KeyEvent) bool {
+	if g == nil || g.volumeController == nil || event.Action != KeyDown || !event.Modifiers.Has(ModFn) {
+		return false
+	}
+	switch event.Code {
+	case KeyF12:
+		g.volumeController.VolumeUp()
+	case KeyF11:
+		g.volumeController.VolumeDown()
+	case KeyM:
+		g.volumeController.ToggleMute()
+	default:
+		return false
+	}
+	return true
 }
 
 // OnKey registers handler and returns its ListenerID.

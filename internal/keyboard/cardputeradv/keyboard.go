@@ -194,7 +194,11 @@ func (keyboard *Keyboard) resolve(mapping keyMapping) (modgadget.KeyCode, rune) 
 		return mapping.code, 0
 	}
 	if keyboard.modifiers.Has(modgadget.ModFn) {
-		return mapping.fnCode, 0
+		code := mapping.fnCode
+		if code == modgadget.KeyUnknown {
+			code = mapping.code
+		}
+		return code, 0
 	}
 	value := mapping.normal
 	if keyboard.modifiers.Has(modgadget.ModShift) {
