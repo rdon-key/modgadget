@@ -167,7 +167,7 @@ func (parser Parser) parse(destination []text.Span, value string, countOnly bool
 			stack[depth] = current
 			tags[depth] = tagStyle
 			depth++
-			if current.Bold {
+			if hasActiveBoldTag(tags[:depth]) {
 				selected.Bold = true
 			}
 			current = selected
@@ -179,6 +179,15 @@ func (parser Parser) parse(destination []text.Span, value string, countOnly bool
 		return destination, emitted, syntaxError(len(value), "unclosed tag")
 	}
 	return destination, emitted, nil
+}
+
+func hasActiveBoldTag(tags []tagKind) bool {
+	for _, tag := range tags {
+		if tag == tagBold {
+			return true
+		}
+	}
+	return false
 }
 
 func validStyleName(name string) bool {

@@ -6,7 +6,7 @@ nested named styles. Bold is synthetic: glyph ink is extended one pixel to the
 right without changing the bitmap font asset or glyph advance.
 
 `markup`は小さなタグ付き文字列を`[]text.Span`へ変換します。対応する構文は
-`<style=name>`、`</style>`、`<br>`、`<br/>`、および`<`を表す`<<`です。
+`<style=name>`、`</style>`、`<b>`、`</b>`、`<br>`、`<br/>`、および`<`を表す`<<`です。
 style tagは最大16段までnestでき、終了時には直前のStyleへ戻ります。タグ名は
 lowercase限定で、style名は小文字英字で始まり、その後に小文字英字、数字、`-`を
 使用できます。

@@ -29,6 +29,8 @@ func testParser() (Parser, *testFont, *testFont, *testFont) {
 			{Name: "medium", Style: text.Style{Font: medium, Foreground: display.ColorGreen, Background: display.ColorBlack}},
 			{Name: "large-red", Style: text.Style{Font: large, Foreground: display.ColorRed, Background: display.ColorBlack}},
 			{Name: "inverse", Style: text.Style{Font: base, Foreground: display.ColorBlack, Background: display.ColorWhite}},
+			{Name: "bold", Style: text.Style{Font: large, Foreground: display.ColorRed, Background: display.ColorBlack, Bold: true}},
+			{Name: "normal", Style: text.Style{Font: medium, Foreground: display.ColorGreen, Background: display.ColorWhite}},
 			{Name: "nil-font", Style: text.Style{Foreground: display.ColorWhite}},
 		},
 	}}, base, medium, large
@@ -125,11 +127,87 @@ func TestParseStyleNestedInBoldRemainsBold(t *testing.T) {
 	}
 }
 
+func TestNamedBoldDoesNotOverrideNestedNormalStyle(t *testing.T) {
+	parser, _, _, _ := testParser()
+	spans, err := parser.Parse("<style=bold>A<style=normal>B</style>C</style>D")
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertSpanStyles(t, spans, []expectedSpanStyle{
+		{value: "A", font: 24, foreground: display.ColorRed, background: display.ColorBlack, bold: true},
+		{value: "B", font: 16, foreground: display.ColorGreen, background: display.ColorWhite},
+		{value: "C", font: 24, foreground: display.ColorRed, background: display.ColorBlack, bold: true},
+		{value: "D", font: 12, foreground: display.ColorWhite, background: display.ColorBlack},
+	})
+}
+
+func TestExplicitBoldOverridesNestedNormalStyle(t *testing.T) {
+	parser, _, _, _ := testParser()
+	spans, err := parser.Parse("<b>A<style=normal>B</style>C</b>D")
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertSpanStyles(t, spans, []expectedSpanStyle{
+		{value: "A", font: 12, foreground: display.ColorWhite, background: display.ColorBlack, bold: true},
+		{value: "B", font: 16, foreground: display.ColorGreen, background: display.ColorWhite, bold: true},
+		{value: "C", font: 12, foreground: display.ColorWhite, background: display.ColorBlack, bold: true},
+		{value: "D", font: 12, foreground: display.ColorWhite, background: display.ColorBlack},
+	})
+}
+
+func TestNamedBoldAndExplicitBoldRestoreIndependently(t *testing.T) {
+	parser, _, _, _ := testParser()
+	spans, err := parser.Parse("<style=bold>A<b>B<style=normal>C</style>D</b>E</style>F")
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertSpanStyles(t, spans, []expectedSpanStyle{
+		{value: "A", font: 24, foreground: display.ColorRed, background: display.ColorBlack, bold: true},
+		{value: "B", font: 24, foreground: display.ColorRed, background: display.ColorBlack, bold: true},
+		{value: "C", font: 16, foreground: display.ColorGreen, background: display.ColorWhite, bold: true},
+		{value: "D", font: 24, foreground: display.ColorRed, background: display.ColorBlack, bold: true},
+		{value: "E", font: 24, foreground: display.ColorRed, background: display.ColorBlack, bold: true},
+		{value: "F", font: 12, foreground: display.ColorWhite, background: display.ColorBlack},
+	})
+}
+
+func TestNestedBoldTagsRestoreByDepth(t *testing.T) {
+	parser, _, _, _ := testParser()
+	spans, err := parser.Parse("<b>A<b>B</b>C</b>D")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(spans) != 4 || !spans[0].Bold || !spans[1].Bold || !spans[2].Bold || spans[3].Bold {
+		t.Fatalf("spans=%+v", spans)
+	}
+}
+
 func TestParseBoldErrors(t *testing.T) {
 	parser, _, _, _ := testParser()
 	for _, value := range []string{"</b>", "<b>x", "<b><style=medium>x</b></style>"} {
 		if spans, err := parser.Parse(value); err == nil || spans != nil {
 			t.Fatalf("value=%q spans=%+v err=%v", value, spans, err)
+		}
+	}
+}
+
+type expectedSpanStyle struct {
+	value                  string
+	font                   int16
+	foreground, background display.Color565
+	bold                   bool
+}
+
+func assertSpanStyles(t *testing.T, spans []text.Span, want []expectedSpanStyle) {
+	t.Helper()
+	if len(spans) != len(want) {
+		t.Fatalf("len=%d want=%d spans=%+v", len(spans), len(want), spans)
+	}
+	for index := range want {
+		got := spans[index]
+		if got.Value != want[index].value || fontIdentifier(t, got.Font) != want[index].font ||
+			got.Foreground != want[index].foreground || got.Background != want[index].background || got.Bold != want[index].bold {
+			t.Fatalf("span %d=%+v want=%+v", index, got, want[index])
 		}
 	}
 }
