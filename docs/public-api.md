@@ -359,6 +359,7 @@ the Viewport stays clean and sends no additional frames. Short text moves too.
 | `ScrollSpeed` + `ScrollLoop` | `0` | Left | Yes | Never completes | Does not move |
 | `ScrollSpeed` + `ScrollFromLeft` | `-textWidth` | Right | No | Clears and stops | Moves |
 | `ScrollSpeed` + `ScrollFromRight` | `viewportWidth` | Left | No | Clears and stops | Moves |
+| `ScrollSpeed` + `ScrollFromRight` + `ScrollLoop` | `viewportWidth` | Left | Yes | Never completes | Moves |
 
 Loop example:
 
@@ -371,8 +372,10 @@ view.SetHorizontalScroll(
 ```
 
 Looping draws the current copy at `-offset` and the next copy after
-`textWidth + gap`. One-shot modes take precedence when combined with Loop, and
-Gap is unused by one-shot modes. A speed of zero or less disables scrolling.
+`textWidth + gap`. `ScrollFromRight` and `ScrollLoop` can be combined: the first
+copy starts outside the right edge and subsequent copies use `ScrollGap`.
+`ScrollFromLeft` remains a one-shot mode. Gap is unused by one-shot modes. A
+speed of zero or less disables scrolling.
 Negative Gap values are currently accepted without validation and can produce
 overlapping or unusual loop cycles.
 
@@ -466,9 +469,9 @@ Only identifiers currently exported by the root package are listed here.
 | `type ScrollOption func(*horizontalScroll)` | Opaque scroll option | Use supplied constructors |
 | `func ScrollSpeed(pixelsPerSecond float64) ScrollOption` | Sets speed | Non-positive disables scroll |
 | `func ScrollGap(pixels int16) ScrollOption` | Sets loop gap | Negative values are accepted |
-| `func ScrollLoop() ScrollOption` | Enables default leftward loop | Ignored by one-shot modes |
+| `func ScrollLoop() ScrollOption` | Enables a gap-separated leftward loop | Combines with `ScrollFromRight` |
 | `func ScrollFromLeft() ScrollOption` | Moves right once from the left | Short text moves |
-| `func ScrollFromRight() ScrollOption` | Moves left once from the right | Short text moves |
+| `func ScrollFromRight() ScrollOption` | Starts at the right and moves left | One-shot alone; loops with `ScrollLoop` |
 
 ### Style
 

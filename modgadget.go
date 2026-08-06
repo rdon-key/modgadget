@@ -111,7 +111,8 @@ func ScrollFromLeft() ScrollOption {
 	return func(s *horizontalScroll) { s.fromLeft, s.fromRight = true, false }
 }
 
-// ScrollFromRight starts the text outside the right edge and moves it left once.
+// ScrollFromRight starts text outside the right edge. Without ScrollLoop it
+// moves left once; with ScrollLoop it continues in gap-separated cycles.
 func ScrollFromRight() ScrollOption {
 	return func(s *horizontalScroll) { s.fromRight, s.fromLeft = true, false }
 }
@@ -181,7 +182,7 @@ func (v *Viewport) SetText(value string) error {
 		return v.parseErr
 	}
 	v.layout, v.textWidth, v.parseErr = layout, layout.Measurement().MaxAdvanceX, nil
-	if v.scroll.oneShot() {
+	if v.scroll.fromLeft || v.scroll.fromRight {
 		v.offset = v.initialScrollOffset()
 	}
 	maxGlyphWidth := int16(1)
@@ -243,7 +244,7 @@ func (g *Gadget) Update(now time.Time) {
 }
 
 func (v *Viewport) update(now time.Time) {
-	if !v.scrollEnabled || v.scroll.speed <= 0 || (!v.scroll.oneShot() && v.textWidth <= v.bounds.Width) {
+	if !v.scrollEnabled || v.scroll.speed <= 0 || (!v.scroll.oneShot() && v.textWidth <= v.bounds.Width && !(v.scroll.loop && v.scroll.fromRight)) {
 		return
 	}
 	if v.scroll.oneShot() && v.finished {
@@ -281,7 +282,7 @@ func (v *Viewport) update(now time.Time) {
 		}
 		return
 	}
-	if v.scroll.fromRight {
+	if v.scroll.fromRight && v.scroll.oneShot() {
 		distance := next
 		travel := int64(v.bounds.Width) + int64(v.textWidth)
 		if distance >= travel {
@@ -305,7 +306,14 @@ func (v *Viewport) update(now time.Time) {
 	if v.scroll.loop {
 		cycle := int64(v.textWidth) + int64(v.scroll.gap)
 		if cycle > 0 {
-			next %= cycle
+			if v.scroll.fromRight {
+				next -= int64(v.bounds.Width)
+				if next >= cycle {
+					next %= cycle
+				}
+			} else {
+				next %= cycle
+			}
 		} else {
 			next = 0
 		}
@@ -344,7 +352,7 @@ func (v *Viewport) render(target Display) error {
 	if v.parseErr != nil {
 		return v.parseErr
 	}
-	if v.scrollEnabled && v.scroll.speed > 0 && (v.scroll.oneShot() || v.textWidth > v.bounds.Width) {
+	if v.scrollEnabled && v.scroll.speed > 0 && (v.scroll.oneShot() || v.textWidth > v.bounds.Width || (v.scroll.loop && v.scroll.fromRight && v.textWidth > 0)) {
 		return v.renderBuffered(target)
 	}
 	return v.renderDirect(target)
@@ -418,18 +426,22 @@ func (v *Viewport) drawText(target Display) error {
 	if _, err := v.layout.Draw(target, penX, baseline, v.scratch); err != nil {
 		return fmt.Errorf("modgadget: draw text: %w", err)
 	}
-	if v.scroll.loop && !v.scroll.oneShot() && v.scrollEnabled && v.textWidth > v.bounds.Width {
-		next := int32(penX) + int32(v.textWidth) + int32(v.scroll.gap)
-		if next <= math.MaxInt16 && next >= math.MinInt16 {
-			if _, err := v.layout.Draw(target, int16(next), baseline, v.scratch); err != nil {
-				return fmt.Errorf("modgadget: draw loop text: %w", err)
+	if v.scroll.loop && !v.scroll.oneShot() && v.scrollEnabled && (v.textWidth > v.bounds.Width || v.scroll.fromRight) {
+		cycle := int32(v.textWidth) + int32(v.scroll.gap)
+		for next := int32(penX) + cycle; cycle > 0 && next < int32(v.bounds.Width); next += cycle {
+			if next >= math.MinInt16 {
+				if _, err := v.layout.Draw(target, int16(next), baseline, v.scratch); err != nil {
+					return fmt.Errorf("modgadget: draw loop text: %w", err)
+				}
 			}
 		}
 	}
 	return nil
 }
 
-func (scroll horizontalScroll) oneShot() bool { return scroll.fromLeft || scroll.fromRight }
+func (scroll horizontalScroll) oneShot() bool {
+	return scroll.fromLeft || (scroll.fromRight && !scroll.loop)
+}
 
 func (v *Viewport) initialScrollOffset() int16 {
 	if v.scroll.fromLeft {

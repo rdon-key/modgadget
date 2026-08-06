@@ -377,7 +377,7 @@ func TestScrollFromRightShortTextSingleCopyAndReset(t *testing.T) {
 	if err := v.SetText("a"); err != nil {
 		t.Fatal(err)
 	}
-	v.SetHorizontalScroll(ScrollSpeed(15), ScrollLoop(), ScrollFromRight())
+	v.SetHorizontalScroll(ScrollSpeed(15), ScrollFromRight())
 	v.update(base)
 	v.update(base.Add(time.Second))
 	if -v.offset != 5 {
@@ -410,6 +410,121 @@ func TestScrollFromRightShortTextSingleCopyAndReset(t *testing.T) {
 	v.SetHorizontalScroll(ScrollSpeed(12), ScrollFromRight())
 	if v.finished || v.started || v.offset != -v.bounds.Width {
 		t.Fatalf("SetHorizontalScroll reset: finished=%v started=%v offset=%d", v.finished, v.started, v.offset)
+	}
+}
+
+func TestScrollFromRightLoopStartsOutsideAndRepeatsWithGap(t *testing.T) {
+	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	v := New(&testDisplay{width: 20, height: 10}, WithStyles(testStyles())).Viewport()
+	if err := v.SetText("aaaa"); err != nil {
+		t.Fatal(err)
+	}
+	v.SetHorizontalScroll(ScrollSpeed(10), ScrollGap(5), ScrollLoop(), ScrollFromRight())
+	if v.scroll.oneShot() || v.offset != -20 || -v.offset != v.bounds.Width {
+		t.Fatalf("initial oneShot=%v offset=%d X=%d", v.scroll.oneShot(), v.offset, -v.offset)
+	}
+	v.update(base)
+	v.update(base.Add(time.Second))
+	if v.offset != -10 || -v.offset != 10 {
+		t.Fatalf("one-second offset=%d X=%d", v.offset, -v.offset)
+	}
+	// Text width is 40 and gap is 5, so 65 pixels from the initial position
+	// reaches the next cycle at offset 0.
+	v.update(base.Add(6500 * time.Millisecond))
+	if v.finished || v.offset != 0 {
+		t.Fatalf("cycle boundary finished=%v offset=%d", v.finished, v.offset)
+	}
+	v.update(base.Add(7 * time.Second))
+	if v.finished || v.offset != 5 {
+		t.Fatalf("repeated finished=%v offset=%d", v.finished, v.offset)
+	}
+	if err := v.SetText("bbbbb"); err != nil {
+		t.Fatal(err)
+	}
+	if v.started || v.finished || v.offset != -v.bounds.Width {
+		t.Fatalf("changed text did not restart outside: started=%v finished=%v offset=%d", v.started, v.finished, v.offset)
+	}
+}
+
+func TestScrollFromRightAndLoopStandaloneModesRemainUnchanged(t *testing.T) {
+	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	newView := func() *Viewport {
+		v := New(&testDisplay{width: 20, height: 10}, WithStyles(testStyles())).Viewport()
+		if err := v.SetText("aaaa"); err != nil {
+			t.Fatal(err)
+		}
+		return v
+	}
+
+	oneShot := newView()
+	oneShot.SetHorizontalScroll(ScrollSpeed(10), ScrollFromRight())
+	if !oneShot.scroll.oneShot() || oneShot.offset != -oneShot.bounds.Width {
+		t.Fatalf("from-right oneShot=%v offset=%d", oneShot.scroll.oneShot(), oneShot.offset)
+	}
+	oneShot.update(base)
+	oneShot.update(base.Add(6 * time.Second))
+	if !oneShot.finished {
+		t.Fatal("standalone ScrollFromRight no longer finishes")
+	}
+
+	loop := newView()
+	loop.SetHorizontalScroll(ScrollSpeed(30), ScrollGap(5), ScrollLoop())
+	if loop.scroll.oneShot() || loop.offset != 0 {
+		t.Fatalf("standalone loop oneShot=%v offset=%d", loop.scroll.oneShot(), loop.offset)
+	}
+	loop.update(base)
+	loop.update(base.Add(2 * time.Second))
+	if loop.finished || loop.offset != 15 {
+		t.Fatalf("standalone loop finished=%v offset=%d", loop.finished, loop.offset)
+	}
+}
+
+func TestScrollFromRightLoopHandlesShortText(t *testing.T) {
+	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	v := New(&testDisplay{width: 20, height: 10}, WithStyles(testStyles())).Viewport()
+	if err := v.SetText("a"); err != nil {
+		t.Fatal(err)
+	}
+	v.SetHorizontalScroll(ScrollSpeed(10), ScrollGap(5), ScrollFromRight(), ScrollLoop())
+	v.update(base)
+	v.update(base.Add(4 * time.Second))
+	if v.finished {
+		t.Fatal("short loop finished")
+	}
+	if err := v.owner.Render(); err != nil {
+		t.Fatal(err)
+	}
+
+}
+
+func TestEmptyTextScrollModes(t *testing.T) {
+	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	tests := []struct {
+		name       string
+		options    []ScrollOption
+		wantFinish bool
+		wantOffset int16
+	}{
+		{name: "from right one shot", options: []ScrollOption{ScrollSpeed(10), ScrollFromRight()}, wantFinish: true, wantOffset: 0},
+		{name: "from left one shot", options: []ScrollOption{ScrollSpeed(10), ScrollFromLeft()}, wantFinish: true, wantOffset: -20},
+		{name: "from right loop", options: []ScrollOption{ScrollSpeed(10), ScrollGap(5), ScrollFromRight(), ScrollLoop()}, wantFinish: false, wantOffset: 0},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			v := New(&testDisplay{width: 20, height: 10}, WithStyles(testStyles())).Viewport()
+			if err := v.SetText(""); err != nil {
+				t.Fatal(err)
+			}
+			v.SetHorizontalScroll(test.options...)
+			v.update(base)
+			v.update(base.Add(10 * time.Second))
+			if v.finished != test.wantFinish || v.offset != test.wantOffset {
+				t.Fatalf("finished=%v offset=%d, want finished=%v offset=%d", v.finished, v.offset, test.wantFinish, test.wantOffset)
+			}
+			if err := v.owner.Render(); err != nil {
+				t.Fatal(err)
+			}
+		})
 	}
 }
 
@@ -726,6 +841,9 @@ func TestShortScrolledTextDoesNotUseBuffer(t *testing.T) {
 	v.owner.Update(base)
 	if err := v.owner.Render(); err != nil {
 		t.Fatal(err)
+	}
+	if len(b.begins) != 2 {
+		t.Fatalf("short standalone loop drew extra copies: BeginRect count=%d want=2", len(b.begins))
 	}
 	count := len(b.begins)
 	v.owner.Update(base.Add(10 * time.Second))
