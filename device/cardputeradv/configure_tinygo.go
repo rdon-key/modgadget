@@ -50,8 +50,8 @@ func configureKeyboard() (Keyboard, error) {
 }
 
 func configureAudio() (*audio.Player, error) {
-	player := audio.New()
-	if err := player.Configure(); err != nil {
+	player, err := audio.Configure()
+	if err != nil {
 		return nil, fmt.Errorf("configure Cardputer ADV audio: %w", err)
 	}
 	return player, nil

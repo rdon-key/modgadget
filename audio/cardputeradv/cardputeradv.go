@@ -9,7 +9,10 @@ import (
 )
 
 // Player cooperatively generates and submits audio for a Cardputer ADV.
-// Its fields and hardware implementation are private.
+// Its fields and hardware implementation are private. The zero value and a nil
+// receiver are safe but unconfigured: methods returning an error return
+// ErrNotConfigured, Busy reports false, Volume reports VolumeMute, Muted reports
+// true, and volume controls without an error result are no-ops.
 type Player struct{ impl *internalaudio.Player }
 
 // Pattern identifies one built-in Cardputer ADV sound pattern.
@@ -42,29 +45,26 @@ const (
 
 var (
 	// ErrNotConfigured reports an operation on an unconfigured Player.
-	ErrNotConfigured error
+	ErrNotConfigured = internalaudio.ErrNotConfigured
 	// ErrInvalidFrequency reports an unsupported tone frequency.
-	ErrInvalidFrequency error
+	ErrInvalidFrequency = internalaudio.ErrInvalidFrequency
 	// ErrInvalidDuration reports a non-positive tone duration.
-	ErrInvalidDuration error
+	ErrInvalidDuration = internalaudio.ErrInvalidDuration
 	// ErrInvalidPattern reports an unknown built-in Pattern.
-	ErrInvalidPattern error
+	ErrInvalidPattern = internalaudio.ErrInvalidPattern
 	// ErrInvalidVolume reports a VolumeLevel outside the supported range.
-	ErrInvalidVolume error
+	ErrInvalidVolume = internalaudio.ErrInvalidVolume
 )
 
-func init() {
-	ErrNotConfigured = internalaudio.ErrNotConfigured
-	ErrInvalidFrequency = internalaudio.ErrInvalidFrequency
-	ErrInvalidDuration = internalaudio.ErrInvalidDuration
-	ErrInvalidPattern = internalaudio.ErrInvalidPattern
-	ErrInvalidVolume = internalaudio.ErrInvalidVolume
+// Configure initializes the Cardputer ADV codec and I2S transmitter and
+// returns a ready Player. It returns nil and an error if initialization fails.
+func Configure() (*Player, error) {
+	impl := internalaudio.New()
+	if err := impl.Configure(); err != nil {
+		return nil, err
+	}
+	return &Player{impl: impl}, nil
 }
-
-// New returns an unconfigured Player connected to Cardputer ADV audio
-// hardware. Applications normally obtain a configured player from
-// device/cardputeradv.ConfigureAudio.
-func New() *Player { return &Player{impl: internalaudio.New()} }
 
 func (p *Player) internal() *internalaudio.Player {
 	if p == nil {
@@ -73,57 +73,105 @@ func (p *Player) internal() *internalaudio.Player {
 	return p.impl
 }
 
-// Configure initializes the Cardputer ADV codec and I2S transmitter.
-func (p *Player) Configure() error { return p.internal().Configure() }
-
 // PlayTone replaces current playback with a tone and returns without sending PCM.
 func (p *Player) PlayTone(frequencyHz uint16, duration time.Duration) error {
-	return p.internal().PlayTone(frequencyHz, duration)
+	if p.internal() == nil {
+		return ErrNotConfigured
+	}
+	return p.impl.PlayTone(frequencyHz, duration)
 }
 
 // PlayPattern replaces current playback with a built-in fixed pattern.
 func (p *Player) PlayPattern(pattern Pattern) error {
-	return p.internal().PlayPattern(internalaudio.Pattern(pattern))
+	if p.internal() == nil {
+		return ErrNotConfigured
+	}
+	return p.impl.PlayPattern(internalaudio.Pattern(pattern))
 }
 
 // Update performs at most one non-blocking audio submission.
-func (p *Player) Update() error { return p.internal().Update() }
+func (p *Player) Update() error {
+	if p.internal() == nil {
+		return ErrNotConfigured
+	}
+	return p.impl.Update()
+}
 
-// Busy reports whether audio or its final silence buffer is pending.
-func (p *Player) Busy() bool { return p.internal().Busy() }
+// Busy reports whether audio or its final silence buffer is pending. It reports
+// false for a nil receiver or zero Player.
+func (p *Player) Busy() bool {
+	return p.internal() != nil && p.impl.Busy()
+}
 
 // Stop cancels playback and submits a finite silence chunk.
-func (p *Player) Stop() error { return p.internal().Stop() }
+func (p *Player) Stop() error {
+	if p.internal() == nil {
+		return ErrNotConfigured
+	}
+	return p.impl.Stop()
+}
 
 // SetVolume changes the software gain used by subsequent audio submissions.
 func (p *Player) SetVolume(level VolumeLevel) error {
-	return p.internal().SetVolume(internalaudio.VolumeLevel(level))
+	if p.internal() == nil {
+		return ErrNotConfigured
+	}
+	return p.impl.SetVolume(internalaudio.VolumeLevel(level))
 }
 
-// Volume returns the current software gain level.
-func (p *Player) Volume() VolumeLevel { return VolumeLevel(p.internal().Volume()) }
+// Volume returns the current software gain level. It returns VolumeMute for a
+// nil receiver or zero Player.
+func (p *Player) Volume() VolumeLevel {
+	if p.internal() == nil {
+		return VolumeMute
+	}
+	return VolumeLevel(p.impl.Volume())
+}
 
-// VolumeUp raises software volume by one level and stops at high.
-func (p *Player) VolumeUp() { p.internal().VolumeUp() }
+// VolumeUp raises software volume by one level and stops at high. It is a no-op
+// for a nil receiver or zero Player.
+func (p *Player) VolumeUp() {
+	if p.internal() != nil {
+		p.impl.VolumeUp()
+	}
+}
 
-// VolumeDown lowers software volume by one level and stops at mute.
-func (p *Player) VolumeDown() { p.internal().VolumeDown() }
+// VolumeDown lowers software volume by one level and stops at mute. It is a
+// no-op for a nil receiver or zero Player.
+func (p *Player) VolumeDown() {
+	if p.internal() != nil {
+		p.impl.VolumeDown()
+	}
+}
 
-// Mute stores the current non-mute level and selects mute.
-func (p *Player) Mute() { p.internal().Mute() }
+// Mute stores the current non-mute level and selects mute. It is a no-op for a
+// nil receiver or zero Player.
+func (p *Player) Mute() {
+	if p.internal() != nil {
+		p.impl.Mute()
+	}
+}
 
-// Unmute restores the most recently selected non-mute level.
-func (p *Player) Unmute() { p.internal().Unmute() }
+// Unmute restores the most recently selected non-mute level. It is a no-op for
+// a nil receiver or zero Player.
+func (p *Player) Unmute() {
+	if p.internal() != nil {
+		p.impl.Unmute()
+	}
+}
 
-// ToggleMute switches between mute and the previous non-mute level.
-func (p *Player) ToggleMute() { p.internal().ToggleMute() }
+// ToggleMute switches between mute and the previous non-mute level. It is a
+// no-op for a nil receiver or zero Player.
+func (p *Player) ToggleMute() {
+	if p.internal() != nil {
+		p.impl.ToggleMute()
+	}
+}
 
-// Muted reports whether software volume is mute.
-func (p *Player) Muted() bool { return p.internal().Muted() }
-
-// Next returns the next volume level, wrapping from high to mute.
-func (level VolumeLevel) Next() VolumeLevel {
-	return VolumeLevel(internalaudio.VolumeLevel(level).Next())
+// Muted reports whether software volume is mute. It reports true for a nil
+// receiver or zero Player.
+func (p *Player) Muted() bool {
+	return p.internal() == nil || p.impl.Muted()
 }
 
 // String returns the short display name of level.

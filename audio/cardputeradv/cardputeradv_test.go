@@ -1,8 +1,10 @@
 package cardputeradv
 
 import (
+	"errors"
 	"reflect"
 	"testing"
+	"time"
 
 	"github.com/rdon-key/modgadget"
 	internalaudio "github.com/rdon-key/modgadget/internal/audio/cardputeradv"
@@ -65,4 +67,39 @@ func TestPlayerPublicMethodSet(t *testing.T) {
 	_ = player.VolumeUp
 	_ = player.VolumeDown
 	_ = player.ToggleMute
+}
+
+func TestZeroAndNilPlayerAreSafe(t *testing.T) {
+	players := []*Player{{}, nil}
+	for _, player := range players {
+		errorMethods := []struct {
+			name string
+			call func() error
+		}{
+			{"PlayTone", func() error { return player.PlayTone(440, time.Second) }},
+			{"PlayPattern", func() error { return player.PlayPattern(PatternClick) }},
+			{"Update", player.Update},
+			{"Stop", player.Stop},
+			{"SetVolume", func() error { return player.SetVolume(VolumeHigh) }},
+		}
+		for _, method := range errorMethods {
+			if err := method.call(); !errors.Is(err, ErrNotConfigured) {
+				t.Errorf("%s error=%v, want ErrNotConfigured", method.name, err)
+			}
+		}
+		if player.Busy() {
+			t.Error("Busy=true, want false")
+		}
+		if got := player.Volume(); got != VolumeMute {
+			t.Errorf("Volume=%v, want VolumeMute", got)
+		}
+		if !player.Muted() {
+			t.Error("Muted=false, want true")
+		}
+		player.VolumeUp()
+		player.VolumeDown()
+		player.Mute()
+		player.Unmute()
+		player.ToggleMute()
+	}
 }
