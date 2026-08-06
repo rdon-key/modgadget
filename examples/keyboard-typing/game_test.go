@@ -1,12 +1,10 @@
 package main
 
 import (
-	"strings"
 	"testing"
 
 	"github.com/rdon-key/modgadget"
-	"github.com/rdon-key/modgadget/internal/fontdata/mgf/efont16"
-	"github.com/rdon-key/modgadget/internal/text/markup"
+	"github.com/rdon-key/modgadget/font/efont16"
 )
 
 func TestTypingStatePrintableRuneAndBackspace(t *testing.T) {
@@ -50,22 +48,15 @@ func TestEscapeMarkupForDisplay(t *testing.T) {
 
 func TestEscapedTagLikeInputParsesAsPlainText(t *testing.T) {
 	const raw = "<b>hello</b>"
-	parser := markup.Parser{Styles: modgadget.StyleSet{Default: modgadget.Style{
-		Font: modgadget.NewMGFFont(efont16.Font),
-	}}}
-	spans, err := parser.Parse(escapeMarkup(raw))
+	styles := modgadget.StyleSet{Default: modgadget.Style{
+		Font: efont16.Font,
+	}}
+	measurement, err := modgadget.MeasureText(escapeMarkup(raw), styles)
 	if err != nil {
 		t.Fatal(err)
 	}
-	var displayed strings.Builder
-	for _, span := range spans {
-		if span.Bold {
-			t.Fatalf("input was interpreted as Bold: %+v", spans)
-		}
-		displayed.WriteString(span.Value)
-	}
-	if got := displayed.String(); got != raw {
-		t.Fatalf("displayed=%q want=%q", got, raw)
+	if measurement.Width != int16(len(raw)*8) || measurement.LineCount != 1 {
+		t.Fatalf("escaped measurement=%+v", measurement)
 	}
 }
 

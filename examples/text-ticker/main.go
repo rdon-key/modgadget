@@ -7,7 +7,7 @@ import (
 
 	"github.com/rdon-key/modgadget"
 	board "github.com/rdon-key/modgadget/examples/internal/cardputeradv"
-	"github.com/rdon-key/modgadget/internal/fontdata/mgf/efont24"
+	"github.com/rdon-key/modgadget/font/efont24"
 )
 
 func main() {
@@ -16,7 +16,7 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	font := modgadget.NewMGFFont(efont24.Font)
+	font := efont24.Font
 	gadget := modgadget.New(panel, modgadget.WithStyles(modgadget.StyleSet{
 		Default: modgadget.Style{Font: font, Foreground: modgadget.ColorWhite, Background: modgadget.ColorBlack},
 	}))

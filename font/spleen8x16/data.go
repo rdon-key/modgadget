@@ -4,11 +4,11 @@ package spleen8x16
 import (
 	_ "embed"
 
-	"github.com/rdon-key/modgadget/internal/mgf"
+	"github.com/rdon-key/modgadget"
 )
 
 //go:embed spleen-8x16-full.mgf
 var data string
 
 // Font is the embedded full Spleen 8x16 font.
-var Font mgf.Font = mgf.MustOpen(data)
+var Font modgadget.Font = modgadget.MustOpenMGF(data)

@@ -7,7 +7,6 @@ import (
 	"time"
 
 	displaypkg "github.com/rdon-key/modgadget/internal/display"
-	"github.com/rdon-key/modgadget/internal/mgf"
 	"github.com/rdon-key/modgadget/internal/text"
 	"github.com/rdon-key/modgadget/internal/text/markup"
 )
@@ -17,14 +16,6 @@ const maxKeyEventsPerUpdate = 64
 // Display receives row-major RGB565 pixel data for rectangular display regions.
 type Display = displaypkg.Backend
 type Color565 = displaypkg.Color565
-type Font = text.Font
-type FontStack = text.FontStack
-type MGFFont = text.MGFFont
-type Style = text.Style
-type StyleEntry = text.StyleEntry
-type StyleSet = text.StyleSet
-
-func NewMGFFont(source mgf.Font) MGFFont { return text.NewMGFFont(source) }
 
 const (
 	ColorBlack = displaypkg.ColorBlack
@@ -38,7 +29,9 @@ func RGB565(red, green, blue uint8) Color565 { return displaypkg.RGB565(red, gre
 
 type Option func(*Gadget)
 
-func WithStyles(styles StyleSet) Option { return func(g *Gadget) { g.styles = styles } }
+func WithStyles(styles StyleSet) Option {
+	return func(g *Gadget) { g.styles = internalStyles(styles) }
+}
 
 type Gadget struct {
 	display            Display

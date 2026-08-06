@@ -1,3 +1,2 @@
-internal/fontdata/mgf/efont16/efont16-full.mgf -text
-internal/fontdata/mgf/efont24/efont24-full.mgf -text
+font/**/*.mgf -text
 LICENSES/efont-unicode-bdf-0.4.2/** -text -whitespace

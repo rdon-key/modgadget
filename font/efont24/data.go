@@ -4,11 +4,11 @@ package efont24
 import (
 	_ "embed"
 
-	"github.com/rdon-key/modgadget/internal/mgf"
+	"github.com/rdon-key/modgadget"
 )
 
 //go:embed efont24-full.mgf
 var data string
 
 // Font is the embedded full Efont Biwidth 24 font.
-var Font mgf.Font = mgf.MustOpen(data)
+var Font modgadget.Font = modgadget.MustOpenMGF(data)

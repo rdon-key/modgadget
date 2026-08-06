@@ -11,9 +11,10 @@ It does not represent server-side application infrastructure.
 
 ## First `main.go`
 
-The following minimal program is intended to be placed inside the ModGadget
-repository. The ST7789 display driver and embedded font asset are currently in
-`internal` packages, so an external module cannot use these imports unchanged.
+The following repository-local program is intended to run inside the
+ModGadget repository. It uses the bundled public font package together with
+the repository's internal ST7789 driver; external modules cannot import that
+driver and must provide their own Display implementation.
 
 ```go
 //go:build tinygo
@@ -25,7 +26,7 @@ import (
 	"time"
 
 	"github.com/rdon-key/modgadget"
-	"github.com/rdon-key/modgadget/internal/fontdata/mgf/efont24"
+	"github.com/rdon-key/modgadget/font/efont24"
 	"github.com/rdon-key/modgadget/internal/st7789"
 )
 
@@ -62,7 +63,7 @@ func main() {
 		panic(err)
 	}
 
-	font := modgadget.NewMGFFont(efont24.Font)
+	font := efont24.Font
 	styles := modgadget.StyleSet{
 		Default: modgadget.Style{
 			Font:       font,
@@ -109,7 +110,7 @@ func main() {
    ModGadget does not configure hardware automatically.
 2. **Create the ST7789 display driver.** The configured panel satisfies
    `modgadget.Display`.
-3. **Prepare a Font.** `NewMGFFont` adapts the embedded Efont 24 asset.
+3. **Prepare a Font.** `efont24.Font` is an opaque bundled Font handle.
 4. **Define Styles.** `Default` supplies the normal font and colors, while
    `message` is selected by markup.
 5. **Create the Gadget.** `New` stores the Display and StyleSet.
@@ -145,10 +146,12 @@ in `internal/st7789` and cannot be imported by an external module.
 
 ## Preparing a Font
 
-Inside this repository, an embedded MGF asset is adapted as follows:
+Bundled fonts are public packages and only imported assets are linked:
 
 ```go
-font := modgadget.NewMGFFont(efont24.Font)
+import "github.com/rdon-key/modgadget/font/efont24"
+
+font := efont24.Font
 ```
 
 Representative embedded assets are:
@@ -158,20 +161,32 @@ Representative embedded assets are:
 - Shinonome 12dot
 - Spleen 8×16
 
-The current font boundary is not ready for external modules:
+Applications can embed their own validated MGF asset without copying it:
 
-- embedded assets are under `internal/fontdata/...`;
-- the argument type of `NewMGFFont` is internal;
-- the Glyph type returned by `Font.Lookup` is not exported by the root package;
-- the FontMetrics type returned by `Font.Metrics` is not exported by the root
-  package;
-- there is no supported external path for implementing a custom Font today.
+```go
+//go:embed fonts/custom.mgf
+var fontData string
 
-Do not copy the repository-only font imports into an external module and expect
-them to compile.
+font, err := modgadget.OpenMGF(fontData)
+```
 
-`FontStack` searches `Primary` first and then up to three `Fallbacks` in array
-order. Its metrics are the component-wise maximum of the participating fonts.
+`Font` is an opaque value handle. `Valid`, `HasGlyph`, and `Metrics` expose
+validation, character coverage, and line metrics without exposing glyph
+bitmaps or MGF internals. The zero Font is invalid and safe to inspect.
+External Font engine implementations are not currently a public extension
+point.
+
+`NewFontStack(primary, fallbacks...)` searches the primary first and then up
+to three fallbacks in argument order. Its metrics are the component-wise
+maximum of participating fonts.
+
+```go
+if !font.HasGlyph('あ') {
+	// choose another font or report missing coverage
+}
+
+measurement, err := modgadget.MeasureText(value, styles)
+```
 
 ## Style
 
@@ -484,7 +499,7 @@ Only identifiers currently exported by the root package are listed here.
 | Signature | Description | Error and notes |
 | --- | --- | --- |
 | `type StyleSet` | Default and named Styles | First duplicate name wins |
-| `type Style` | Font and RGB565 colors | A selected nil Font is an error |
+| `type Style` | Font, RGB565 colors, and Bold | An invalid Font is an error |
 | `type StyleEntry` | Name-to-Style entry | Names are case-sensitive |
 | `func (styles StyleSet) Lookup(name string) (Style, bool)` | Finds the first exact name | No error; false if absent |
 
@@ -492,16 +507,16 @@ Only identifiers currently exported by the root package are listed here.
 
 | Signature | Description | Error and notes |
 | --- | --- | --- |
-| `type Font` | Glyph lookup and metrics interface | Its result types are not root-exported |
-| `type FontStack` | Primary plus three fallbacks | First matching glyph wins |
-| `type MGFFont` | MGF adapter | Source representation is internal-derived |
-| `func NewMGFFont(source /* internal MGF font */) MGFFont` | Adapts validated MGF data | External modules cannot create the argument today |
-| `Font.Lookup(r rune)` | Looks up one glyph | The exact result type is not root-exported |
-| `Font.Metrics()` | Returns line metrics | The exact result type is not root-exported |
-| `FontStack.Lookup(r rune)` | Searches primary and fallbacks | The exact result type is not root-exported |
-| `FontStack.Metrics()` | Combines font metrics | Component-wise maximum |
-| `MGFFont.Lookup(r rune)` | Looks up an MGF glyph | The exact result type is not root-exported |
-| `MGFFont.Metrics()` | Returns MGF metrics | The exact result type is not root-exported |
+| `type Font` | Opaque, copyable font handle | Zero value is invalid and safe |
+| `type FontMetrics` | Baseline-relative Ascent, Descent, and LineGap | Values define the font's line metrics |
+| `func (Font) Valid() bool` | Reports whether a Font is usable | False for zero Font |
+| `func (Font) HasGlyph(r rune) bool` | Reports character coverage | Does not expose bitmap data |
+| `func (Font) Metrics() FontMetrics` | Returns line metrics | Zero metrics for zero Font |
+| `func OpenMGF(data string) (Font, error)` | Validates an MGF string without copying it | Rejects malformed data |
+| `func MustOpenMGF(data string) Font` | Opens static trusted MGF data | Panics on malformed data |
+| `func NewFontStack(primary Font, fallbacks ...Font) (Font, error)` | Creates ordered fallback lookup | Up to three fallbacks |
+| `type TextMeasurement` | Width and LineCount | Uses Viewport layout rules |
+| `func MeasureText(value string, styles StyleSet) (TextMeasurement, error)` | Measures markup without rendering | Returns markup and glyph errors |
 
 ### Color
 

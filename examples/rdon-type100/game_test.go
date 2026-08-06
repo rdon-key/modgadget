@@ -6,10 +6,9 @@ import (
 	"time"
 
 	"github.com/rdon-key/modgadget"
+	"github.com/rdon-key/modgadget/font/efont16"
+	"github.com/rdon-key/modgadget/font/efont24"
 	audio "github.com/rdon-key/modgadget/internal/audio/cardputeradv"
-	"github.com/rdon-key/modgadget/internal/fontdata/mgf/efont16"
-	"github.com/rdon-key/modgadget/internal/fontdata/mgf/efont24"
-	"github.com/rdon-key/modgadget/internal/text/markup"
 )
 
 func letterEvent(code modgadget.KeyCode, r rune, action modgadget.KeyAction) modgadget.KeyEvent {
@@ -21,8 +20,7 @@ func TestJapaneseQuestionData(t *testing.T) {
 		t.Fatalf("questions=%d want=20", len(japaneseQuestions))
 	}
 	seenPrompt, seenRoman := map[string]bool{}, map[string]bool{}
-	promptFont := modgadget.NewMGFFont(efont24.Font)
-	promptParser := markup.Parser{Styles: modgadget.StyleSet{Default: modgadget.Style{Font: promptFont}}}
+	promptStyles := modgadget.StyleSet{Default: modgadget.Style{Font: efont24.Font}}
 	for index, item := range japaneseQuestions {
 		if item.prompt == "" || item.roman == "" {
 			t.Fatalf("question %d is empty: %+v", index, item)
@@ -35,29 +33,20 @@ func TestJapaneseQuestionData(t *testing.T) {
 			if r < 'a' || r > 'z' {
 				t.Errorf("question %d roman contains %q", index, r)
 			}
-			if _, ok := efont16.Font.Lookup(r); !ok {
+			if !efont16.Font.HasGlyph(r) {
 				t.Errorf("question %d Efont16 missing %q", index, r)
 			}
-			if _, ok := efont24.Font.Lookup(r); !ok {
+			if !efont24.Font.HasGlyph(r) {
 				t.Errorf("question %d Efont24 missing %q", index, r)
 			}
 		}
-		spans, err := promptParser.Parse(item.prompt)
-		if err != nil {
+		if _, err := modgadget.MeasureText(item.prompt, promptStyles); err != nil {
 			t.Errorf("question %d prompt markup: %v", index, err)
-		} else {
-			for _, span := range spans {
-				for _, r := range span.Value {
-					if _, ok := efont24.Font.Lookup(r); !ok {
-						t.Errorf("question %d Efont24 missing %q", index, r)
-					}
-				}
-			}
 		}
-		if width := fontWidth(t, modgadget.NewMGFFont(efont16.Font), item.roman); width > romanWidth {
+		if width := fontWidth(t, efont16.Font, item.roman); width > romanWidth {
 			t.Errorf("question %d roman width=%d > %d", index, width, romanWidth)
 		}
-		if width := fontWidth(t, modgadget.NewMGFFont(efont24.Font), item.roman); width > inputWidth {
+		if width := fontWidth(t, efont24.Font, item.roman); width > inputWidth {
 			t.Errorf("question %d input width=%d > %d", index, width, inputWidth)
 		}
 	}
@@ -65,15 +54,11 @@ func TestJapaneseQuestionData(t *testing.T) {
 
 func fontWidth(t *testing.T, font modgadget.Font, value string) int16 {
 	t.Helper()
-	var width int16
-	for _, r := range value {
-		glyph, ok := font.Lookup(r)
-		if !ok {
-			t.Fatalf("missing glyph %q", r)
-		}
-		width += glyph.AdvanceX
+	measurement, err := modgadget.MeasureText(value, modgadget.StyleSet{Default: modgadget.Style{Font: font}})
+	if err != nil {
+		t.Fatal(err)
 	}
-	return width
+	return measurement.Width
 }
 
 func TestPlayInputCorrectMissUppercaseAndDuplicateDown(t *testing.T) {
@@ -198,7 +183,7 @@ func TestAppDeleteAbortsAndResultEnterReturnsToMenu(t *testing.T) {
 }
 
 func TestPlayingLayoutAndStyles(t *testing.T) {
-	numberWidth := fontWidth(t, modgadget.NewMGFFont(efont24.Font), "00/00")
+	numberWidth := fontWidth(t, efont24.Font, "00/00")
 	regions := []uiRect{
 		{x: statusTimeX, y: statusTimeY, width: statusTimeWidth, height: statusHeight},
 		{x: displayWidth - numberWidth, y: statusNumberY, width: numberWidth, height: statusHeight},
@@ -222,7 +207,7 @@ func TestPlayingLayoutAndStyles(t *testing.T) {
 	if romanHeight != 16 || statusHeight != 24 || promptHeight != 24 || inputHeight != 24 || guideHeight != 24 || promptX != 0 {
 		t.Fatal("playing font/layout heights or prompt alignment changed")
 	}
-	styles := makeStyles(modgadget.NewMGFFont(efont16.Font), modgadget.NewMGFFont(efont24.Font))
+	styles := makeStyles(efont16.Font, efont24.Font)
 	input, ok := styles.Lookup(styleInput)
 	if !ok || input.Foreground != modgadget.ColorWhite || input.Background != modgadget.ColorBlue || input.Font.Metrics().LineHeight() != 24 {
 		t.Fatalf("input style=%+v found=%v", input, ok)
@@ -247,14 +232,14 @@ func TestPlayingGuidesByCourseAndGlyphCoverage(t *testing.T) {
 		{courseKorean, "DEL로 강제 종료 ◆ Fn+M 음소거 ◆ Fn++/Fn+- 음량 조절 ◆ 로마자로 입력하세요."},
 		{courseAll, "DELで強制終了 ◆ Fn+Mで消音 ◆ Fn++/Fn+-で音量調整 ◆ ローマ字で入力して下さい。 ◇ DEL: Quit ◆ Fn+M: Mute ◆ Fn++/Fn+-: Volume ◆ Type the shown letters. ◇ DEL强制结束 ◆ Fn+M静音 ◆ Fn++/Fn+-调节音量 ◆ 请使用拼音输入。 ◇ DEL로 강제 종료 ◆ Fn+M 음소거 ◆ Fn++/Fn+- 음량 조절 ◆ 로마자로 입력하세요."},
 	}
-	font := modgadget.NewMGFFont(efont24.Font)
+	font := efont24.Font
 	for _, test := range tests {
 		got := playingGuideForCourse(test.id)
 		if got != test.want {
 			t.Errorf("course %v guide=%q want=%q", test.id, got, test.want)
 		}
 		for _, r := range got {
-			if _, ok := font.Lookup(r); !ok {
+			if !font.HasGlyph(r) {
 				t.Errorf("course %v guide missing Efont24 rune %q", test.id, r)
 			}
 		}
@@ -275,7 +260,7 @@ func TestPlayingGuidesByCourseAndGlyphCoverage(t *testing.T) {
 	}
 	for _, value := range []string{"DEL", "Fn+M", "Fn++", "Fn+-", ":", "。", "◇"} {
 		for _, r := range value {
-			if _, ok := font.Lookup(r); !ok {
+			if !font.HasGlyph(r) {
 				t.Errorf("required guide token %q missing rune %q", value, r)
 			}
 		}
@@ -287,7 +272,7 @@ func TestPlayingGuidesByCourseAndGlyphCoverage(t *testing.T) {
 
 func TestPlayingGuideKeepsLoopingScrollConfiguration(t *testing.T) {
 	display := &frameDisplay{color: modgadget.ColorBlack}
-	styles := makeStyles(modgadget.NewMGFFont(efont16.Font), modgadget.NewMGFFont(efont24.Font))
+	styles := makeStyles(efont16.Font, efont24.Font)
 	gadget := modgadget.New(display, modgadget.WithStyles(styles))
 	view := gadget.Viewport(modgadget.Bounds(0, 0, 100, 24))
 	if err := setGuide(view, englishPlayingGuide); err != nil {

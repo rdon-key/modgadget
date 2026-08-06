@@ -47,3 +47,22 @@ func (font testFixtureFont) Lookup(r rune) (Glyph, bool) {
 func spanFace(metrics FontMetrics, glyphs []testGlyphInfo, bitmap string) Font {
 	return &testFixtureFont{metrics: metrics, glyphs: glyphs, bitmap: bitmap}
 }
+
+type fixedFont struct {
+	metrics FontMetrics
+	glyphs  [4]struct {
+		r rune
+		g Glyph
+	}
+}
+
+func (font *fixedFont) Lookup(r rune) (Glyph, bool) {
+	for index := range font.glyphs {
+		if font.glyphs[index].r == r {
+			return font.glyphs[index].g, true
+		}
+	}
+	return Glyph{}, false
+}
+
+func (font *fixedFont) Metrics() FontMetrics { return font.metrics }

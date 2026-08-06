@@ -2,7 +2,6 @@ package text
 
 import (
 	"github.com/rdon-key/modgadget/internal/display"
-	"github.com/rdon-key/modgadget/internal/mgf"
 )
 
 // Glyph is the bitmap and placement information used by the text renderer.
@@ -31,32 +30,6 @@ func (metrics FontMetrics) LineHeight() int16 {
 type Font interface {
 	Lookup(r rune) (Glyph, bool)
 	Metrics() FontMetrics
-}
-
-// MGFFont adapts a validated MGF font to the text renderer.
-type MGFFont struct {
-	source mgf.Font
-}
-
-// NewMGFFont adapts an already validated MGF font.
-func NewMGFFont(source mgf.Font) MGFFont { return MGFFont{source: source} }
-
-// Lookup returns a glyph whose bitmap still refers to the embedded MGF data.
-func (font MGFFont) Lookup(r rune) (Glyph, bool) {
-	glyph, ok := font.source.Lookup(r)
-	if !ok {
-		return Glyph{}, false
-	}
-	return Glyph{
-		Width: int16(glyph.Width), Height: int16(glyph.Height), AdvanceX: glyph.AdvanceX,
-		BearingX: glyph.BearingX, BearingY: glyph.BearingY, Bitmap: glyph.Bitmap,
-	}, true
-}
-
-// Metrics returns the MGF header's typographic metrics.
-func (font MGFFont) Metrics() FontMetrics {
-	header := font.source.Header()
-	return FontMetrics{Ascent: int16(header.Ascent), Descent: int16(header.Descent), LineGap: int16(header.LineGap)}
 }
 
 // FontStack searches fonts of the same display size in priority order.

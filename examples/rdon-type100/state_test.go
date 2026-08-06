@@ -6,10 +6,9 @@ import (
 	"testing"
 
 	"github.com/rdon-key/modgadget"
+	"github.com/rdon-key/modgadget/font/efont16"
+	"github.com/rdon-key/modgadget/font/efont24"
 	audio "github.com/rdon-key/modgadget/internal/audio/cardputeradv"
-	"github.com/rdon-key/modgadget/internal/fontdata/mgf/efont16"
-	"github.com/rdon-key/modgadget/internal/fontdata/mgf/efont24"
-	"github.com/rdon-key/modgadget/internal/text/markup"
 )
 
 func keyDown(code modgadget.KeyCode) modgadget.KeyEvent {
@@ -247,7 +246,7 @@ func TestGuideTextMatchesSpecification(t *testing.T) {
 		}
 	}
 	for _, r := range "▲▼" {
-		if _, ok := efont24.Font.Lookup(r); !ok {
+		if !efont24.Font.HasGlyph(r) {
 			t.Errorf("efont24 is missing guide arrow %q", r)
 		}
 	}
@@ -259,20 +258,17 @@ func TestCourseGlyphCoverageAndGuideWidths(t *testing.T) {
 		menuText += item.menuLabel + item.startLabel
 	}
 	for _, r := range menuText {
-		if _, ok := efont16.Font.Lookup(r); !ok {
+		if !efont16.Font.HasGlyph(r) {
 			t.Errorf("efont16 is missing %q", r)
 		}
 	}
 	for _, item := range courses {
-		width := int16(0)
-		for _, r := range item.guide {
-			glyph, ok := efont24.Font.Lookup(r)
-			if !ok {
-				t.Errorf("efont24 is missing %q from %v", r, item.id)
-				continue
-			}
-			width += glyph.AdvanceX
+		measurement, err := modgadget.MeasureText(item.guide, modgadget.StyleSet{Default: modgadget.Style{Font: efont24.Font}})
+		if err != nil {
+			t.Errorf("guide %v: %v", item.id, err)
+			continue
 		}
+		width := measurement.Width
 		if width <= 240 {
 			t.Errorf("guide %v width=%d, want scrolling text", item.id, width)
 		}
@@ -285,17 +281,17 @@ func TestViewportLayoutAndFontMetricsFitDisplay(t *testing.T) {
 		t.Fatalf("layout titleBottom=%d menuBottom=%d guide=%d..%d displayHeight=%d",
 			titleY+titleHeight, menuBottom, guideY, guideY+guideHeight, displayHeight)
 	}
-	menuHeader, guideHeader := efont16.Font.Header(), efont24.Font.Header()
-	if int16(menuHeader.Ascent+menuHeader.Descent+menuHeader.LineGap) > menuHeight {
-		t.Fatalf("efont16 metrics exceed menu height: %+v", menuHeader)
+	menuMetrics, guideMetrics := efont16.Font.Metrics(), efont24.Font.Metrics()
+	if menuMetrics.LineHeight() > menuHeight {
+		t.Fatalf("efont16 metrics exceed menu height: %+v", menuMetrics)
 	}
-	if int16(guideHeader.Ascent+guideHeader.Descent+guideHeader.LineGap) > guideHeight {
-		t.Fatalf("efont24 metrics exceed guide height: %+v", guideHeader)
+	if guideMetrics.LineHeight() > guideHeight {
+		t.Fatalf("efont24 metrics exceed guide height: %+v", guideMetrics)
 	}
 }
 
 func TestTitleCenteringFromMeasuredWidth(t *testing.T) {
-	font := modgadget.NewMGFFont(efont16.Font)
+	font := efont16.Font
 	width, err := textAdvance(font, titleText)
 	if err != nil {
 		t.Fatal(err)
@@ -310,19 +306,11 @@ func TestTitleCenteringFromMeasuredWidth(t *testing.T) {
 }
 
 func TestTitleMarksOnlyType100Bold(t *testing.T) {
-	font := modgadget.NewMGFFont(efont16.Font)
-	spans, err := (markup.Parser{Styles: makeStyles(font, modgadget.NewMGFFont(efont24.Font))}).Parse(titleMarkup)
-	if err != nil {
+	if titleMarkup != "<style=title>Rdon <b>Type 100</b></style>" {
+		t.Fatalf("title markup=%q", titleMarkup)
+	}
+	if _, err := modgadget.MeasureText(titleMarkup, makeStyles(efont16.Font, efont24.Font)); err != nil {
 		t.Fatal(err)
-	}
-	if len(spans) != 2 {
-		t.Fatalf("spans=%+v", spans)
-	}
-	if spans[0].Value != "Rdon " || spans[0].Bold {
-		t.Fatalf("normal span=%+v", spans[0])
-	}
-	if spans[1].Value != "Type 100" || !spans[1].Bold {
-		t.Fatalf("bold span=%+v", spans[1])
 	}
 }
 
@@ -348,8 +336,8 @@ func TestMenuFrameContainsRowsWithoutOverlap(t *testing.T) {
 }
 
 func TestSeparatedStylesAndGuideRed(t *testing.T) {
-	menuFont := modgadget.NewMGFFont(efont16.Font)
-	guideFont := modgadget.NewMGFFont(efont24.Font)
+	menuFont := efont16.Font
+	guideFont := efont24.Font
 	styles := makeStyles(menuFont, guideFont)
 	guide, ok := styles.Lookup(styleGuide)
 	if !ok || guide.Foreground != modgadget.ColorRed || guide.Background != modgadget.ColorBlack || guide.Font.Metrics().LineHeight() != 24 {
@@ -427,14 +415,11 @@ func TestMenuShiftFitsDisplayWidth(t *testing.T) {
 		t.Fatalf("menu bounds x=%d width=%d displayWidth=%d", menuX, menuWidth, displayWidth)
 	}
 	for _, item := range courses {
-		width := int16(0)
-		for _, r := range "⇒ " + item.menuLabel {
-			glyph, ok := efont16.Font.Lookup(r)
-			if !ok {
-				t.Fatalf("missing menu rune %q", r)
-			}
-			width += glyph.AdvanceX
+		measurement, err := modgadget.MeasureText("⇒ "+item.menuLabel, modgadget.StyleSet{Default: modgadget.Style{Font: efont16.Font}})
+		if err != nil {
+			t.Fatal(err)
 		}
+		width := measurement.Width
 		if width > menuWidth {
 			t.Errorf("menu %q width=%d exceeds viewport width=%d", item.menuLabel, width, menuWidth)
 		}

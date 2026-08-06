@@ -133,18 +133,14 @@ func makeInputStyles(font modgadget.Font) modgadget.StyleSet {
 }
 
 func textAdvance(font modgadget.Font, value string) (int16, error) {
-	var width int32
-	for _, r := range value {
-		glyph, ok := font.Lookup(r)
-		if !ok {
-			return 0, fmt.Errorf("missing glyph %q", r)
-		}
-		width += int32(glyph.AdvanceX)
-		if width > int32(displayWidth) {
-			return 0, fmt.Errorf("text width %d exceeds display", width)
-		}
+	measurement, err := modgadget.MeasureText(value, modgadget.StyleSet{Default: modgadget.Style{Font: font}})
+	if err != nil {
+		return 0, err
 	}
-	return int16(width), nil
+	if measurement.Width > displayWidth {
+		return 0, fmt.Errorf("text width %d exceeds display", measurement.Width)
+	}
+	return measurement.Width, nil
 }
 
 func centeredTitleX(titleWidth int16) int16 {

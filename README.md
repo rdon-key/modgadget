@@ -8,6 +8,12 @@ See [Public API](docs/public-api.md) for the current high-level API.
 See [Keyboard API](docs/keyboard.md) for direct key-event input.
 With a volume controller, the standard Cardputer ADV keys are Fn+=, Fn+-, and Fn+M.
 
+Bundled opaque fonts are available from packages such as
+`github.com/rdon-key/modgadget/font/efont24`. Applications can load embedded
+MGF data with `OpenMGF`, inspect coverage with `Font.HasGlyph`, combine fonts
+with `NewFontStack`, and measure markup with `MeasureText`. Glyph bitmaps and
+custom Font engine implementations are intentionally not public APIs.
+
 It currently renders RGB565 graphics directly to an ST7789 without requiring a full framebuffer.
 
 ## What works

@@ -7,8 +7,8 @@ import (
 
 	"github.com/rdon-key/modgadget"
 	board "github.com/rdon-key/modgadget/examples/internal/cardputeradv"
-	"github.com/rdon-key/modgadget/internal/fontdata/mgf/efont16"
-	"github.com/rdon-key/modgadget/internal/fontdata/mgf/efont24"
+	"github.com/rdon-key/modgadget/font/efont16"
+	"github.com/rdon-key/modgadget/font/efont24"
 )
 
 const (
@@ -53,8 +53,8 @@ func main() {
 		panic(err)
 	}
 
-	menuFont := modgadget.NewMGFFont(efont16.Font)
-	largeFont := modgadget.NewMGFFont(efont24.Font)
+	menuFont := efont16.Font
+	largeFont := efont24.Font
 	styles := makeStyles(menuFont, largeFont)
 	inputStyles := makeInputStyles(largeFont)
 	titleWidth := mustTextAdvance(menuFont, titleText) + titleBoldInkExtra

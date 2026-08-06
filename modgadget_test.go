@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/rdon-key/modgadget/internal/display"
-	"github.com/rdon-key/modgadget/internal/fontdata/mgf/efont24"
 	"github.com/rdon-key/modgadget/internal/text"
 )
 
@@ -69,7 +68,8 @@ func (b *testDisplay) WritePixels(p []byte) error {
 func (b *testDisplay) EndRect() error { b.ends++; return b.endErr }
 
 func testStyles() StyleSet {
-	return StyleSet{Default: Style{Font: testFont{advance: 10}, Foreground: ColorWhite, Background: ColorBlack}, Entries: []StyleEntry{{Name: "news", Style: Style{Font: testFont{advance: 10}, Foreground: ColorGreen, Background: ColorBlack}}}}
+	font := Font{impl: testFont{advance: 10}}
+	return StyleSet{Default: Style{Font: font, Foreground: ColorWhite, Background: ColorBlack}, Entries: []StyleEntry{{Name: "news", Style: Style{Font: font, Foreground: ColorGreen, Background: ColorBlack}}}}
 }
 
 func TestViewportBounds(t *testing.T) {
@@ -97,6 +97,22 @@ func TestViewportBounds(t *testing.T) {
 	}
 	if !found {
 		t.Fatal("bounded viewport was not forwarded to display")
+	}
+}
+
+func TestMeasureTextMatchesViewportLayout(t *testing.T) {
+	styles := testStyles()
+	value := "a<style=news><b>b</b></style><br>aa"
+	measurement, err := MeasureText(value, styles)
+	if err != nil {
+		t.Fatal(err)
+	}
+	view := New(&testDisplay{width: 100, height: 30}, WithStyles(styles)).Viewport()
+	if err := view.SetText(value); err != nil {
+		t.Fatal(err)
+	}
+	if measurement.Width != view.textWidth || measurement.LineCount != view.layout.LineCount() {
+		t.Fatalf("public=%+v viewport width=%d lines=%d", measurement, view.textWidth, view.layout.LineCount())
 	}
 }
 
@@ -807,7 +823,7 @@ func TestBufferedErrorsKeepDirty(t *testing.T) {
 
 	tooWide := false
 	styles := testStyles()
-	styles.Default.Font = testFont{advance: 10, tooWide: &tooWide}
+	styles.Default.Font = Font{impl: testFont{advance: 10, tooWide: &tooWide}}
 	v = New(&testDisplay{width: 20, height: 10}, WithStyles(styles)).Viewport()
 	if err := v.SetText("aaaa"); err != nil {
 		t.Fatal(err)
@@ -910,18 +926,18 @@ func TestBufferedSteadyRenderAllocations(t *testing.T) {
 }
 
 func TestTickerFontMetrics(t *testing.T) {
-	font := NewMGFFont(efont24.Font)
+	font := Font{impl: testFont{advance: 10}}
 	metrics := font.Metrics()
-	if metrics.Ascent != 22 || metrics.Descent != 2 || metrics.LineGap != 0 || metrics.LineHeight() != 24 {
+	if metrics.Ascent != 8 || metrics.Descent != 0 || metrics.LineGap != 0 || metrics.LineHeight() != 8 {
 		t.Fatalf("metrics = %+v", metrics)
 	}
-	measurement, err := text.MeasureString(font, "ModGadgetニュース：日本語表示に成功しました。")
+	measurement, err := text.MeasureString(font.impl, "ModGadgetニュース：日本語表示に成功しました。")
 	if err != nil {
 		t.Fatal(err)
 	}
 	height := int(measurement.Bounds.MaxY) - int(measurement.Bounds.MinY)
 	t.Logf("ticker measurement: advance=%d bounds=%+v inkHeight=%d", measurement.Advance, measurement.Bounds, height)
-	if height > 24 {
+	if height > 8 {
 		t.Fatalf("ticker ink height = %d", height)
 	}
 }

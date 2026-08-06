@@ -1,13 +1,13 @@
 package main
 
 import (
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/rdon-key/modgadget"
-	"github.com/rdon-key/modgadget/internal/fontdata/mgf/efont16"
-	"github.com/rdon-key/modgadget/internal/fontdata/mgf/efont24"
-	"github.com/rdon-key/modgadget/internal/text/markup"
+	"github.com/rdon-key/modgadget/font/efont16"
+	"github.com/rdon-key/modgadget/font/efont24"
 )
 
 var expectedEnglish = [...]question{
@@ -43,9 +43,9 @@ var expectedAllLanguages = [...]question{
 }
 
 func TestCourseQuestionTablesAndRenderingCoverage(t *testing.T) {
-	menuFont := modgadget.NewMGFFont(efont16.Font)
-	largeFont := modgadget.NewMGFFont(efont24.Font)
-	promptParser := markup.Parser{Styles: modgadget.StyleSet{Default: modgadget.Style{Font: largeFont}}}
+	menuFont := efont16.Font
+	largeFont := efont24.Font
+	promptStyles := modgadget.StyleSet{Default: modgadget.Style{Font: largeFont}}
 	tests := []struct {
 		id       courseID
 		expected []question
@@ -63,7 +63,7 @@ func TestCourseQuestionTablesAndRenderingCoverage(t *testing.T) {
 		}
 		seenPrompts, seenInputs := map[string]bool{}, map[string]bool{}
 		for index, item := range got {
-			if primaryPrompt(t, promptParser, item.prompt) != primaryPrompt(t, promptParser, test.expected[index].prompt) || item.roman != test.expected[index].roman {
+			if primaryPrompt(t, item.prompt) != primaryPrompt(t, test.expected[index].prompt) || item.roman != test.expected[index].roman {
 				t.Errorf("course %v question %d=%+v want=%+v", test.id, index, item, test.expected[index])
 			}
 			if item.prompt == "" || item.roman == "" {
@@ -73,26 +73,17 @@ func TestCourseQuestionTablesAndRenderingCoverage(t *testing.T) {
 				t.Errorf("course %v duplicate question %d=%+v", test.id, index, item)
 			}
 			seenPrompts[item.prompt], seenInputs[item.roman] = true, true
-			spans, err := promptParser.Parse(item.prompt)
-			if err != nil {
+			if _, err := modgadget.MeasureText(item.prompt, promptStyles); err != nil {
 				t.Errorf("course %v prompt %q markup: %v", test.id, item.prompt, err)
-				continue
-			}
-			for _, span := range spans {
-				for _, r := range span.Value {
-					if _, ok := largeFont.Lookup(r); !ok {
-						t.Errorf("course %v prompt %q missing Efont24 rune %q", test.id, item.prompt, r)
-					}
-				}
 			}
 			for _, r := range item.roman {
 				if r < 'a' || r > 'z' {
 					t.Errorf("course %v input %q contains non-lowercase rune %q", test.id, item.roman, r)
 				}
-				if _, ok := menuFont.Lookup(r); !ok {
+				if !menuFont.HasGlyph(r) {
 					t.Errorf("course %v input %q missing Efont16 rune %q", test.id, item.roman, r)
 				}
-				if _, ok := largeFont.Lookup(r); !ok {
+				if !largeFont.HasGlyph(r) {
 					t.Errorf("course %v input %q missing Efont24 rune %q", test.id, item.roman, r)
 				}
 			}
@@ -109,16 +100,17 @@ func TestCourseQuestionTablesAndRenderingCoverage(t *testing.T) {
 	}
 }
 
-func primaryPrompt(t *testing.T, parser markup.Parser, value string) string {
+func primaryPrompt(t *testing.T, value string) string {
 	t.Helper()
-	spans, err := parser.Parse(value)
-	if err != nil {
-		t.Fatalf("parse prompt %q: %v", value, err)
+	rest, ok := strings.CutPrefix(value, "<b>")
+	if !ok {
+		return value
 	}
-	if len(spans) == 0 {
-		t.Fatalf("prompt %q produced no spans", value)
+	end := strings.Index(rest, "</b>")
+	if end < 0 {
+		t.Fatalf("prompt %q has no closing bold tag", value)
 	}
-	return spans[0].Value
+	return rest[:end]
 }
 
 func TestAllLanguagesMatchesSourceQuestions(t *testing.T) {
@@ -203,9 +195,8 @@ func TestAllLanguagesCyclesJapaneseEnglishChineseKorean(t *testing.T) {
 		t.Fatal("all-languages did not start")
 	}
 	want := []string{"こんにちは", "hello", "你好", "안녕하세요"}
-	parser := markup.Parser{Styles: modgadget.StyleSet{Default: modgadget.Style{Font: modgadget.NewMGFFont(efont24.Font)}}}
 	for index, prompt := range want {
-		if primaryPrompt(t, parser, play.currentQuestion().prompt) != prompt {
+		if primaryPrompt(t, play.currentQuestion().prompt) != prompt {
 			t.Fatalf("step %d prompt=%q want=%q", index, play.currentQuestion().prompt, prompt)
 		}
 		if index+1 < len(want) {
