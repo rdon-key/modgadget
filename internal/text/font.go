@@ -123,6 +123,9 @@ type Style struct {
 	Font       Font
 	Foreground display.Color565
 	Background display.Color565
+	// Bold enables synthetic bold rendering by extending glyph ink one pixel
+	// to the right. It does not change the font's glyph advance.
+	Bold bool
 }
 
 // StyleEntry associates a case-sensitive name with a complete Style.

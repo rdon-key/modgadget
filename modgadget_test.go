@@ -118,6 +118,30 @@ func TestSetTextDirtyAndSameValue(t *testing.T) {
 	}
 }
 
+func TestViewportBoldAllocatesExpandedScratchAndRenders(t *testing.T) {
+	display := &testDisplay{width: 40, height: 12}
+	gadget := New(display, WithStyles(testStyles()))
+	view := gadget.Viewport()
+	if err := view.SetText("<b>a</b>"); err != nil {
+		t.Fatal(err)
+	}
+	if len(view.scratch) != 22 {
+		t.Fatalf("scratch bytes=%d, want 22", len(view.scratch))
+	}
+	if err := gadget.Render(); err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, rect := range display.begins {
+		if rect.Width == 11 && rect.Height == 8 {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("bold glyph rectangle not rendered: %v", display.begins)
+	}
+}
+
 func TestHorizontalScrollTiming(t *testing.T) {
 	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	newView := func(width int16) *Viewport {

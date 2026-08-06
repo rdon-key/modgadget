@@ -68,7 +68,7 @@ func DrawLines(backend display.Backend, lines []Line, penX, firstBaselineY int16
 				return baselineY, fmt.Errorf("text: line %d: text: span %d: %w", index, spanIndex, err)
 			}
 			var err error
-			currentPenX, err = drawFontValue(backend, span.Font, currentPenX, baselineY, span.Value, span.Foreground, span.Background, scratch)
+			currentPenX, err = drawStyledFontValue(backend, span.Font, currentPenX, baselineY, span.Value, span.Foreground, span.Background, span.Bold, scratch)
 			if err != nil {
 				return baselineY, fmt.Errorf("text: line %d: %w", index, err)
 			}

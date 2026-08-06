@@ -53,7 +53,7 @@ func main() {
 	largeFont := modgadget.NewMGFFont(efont24.Font)
 	styles := makeStyles(menuFont, largeFont)
 	inputStyles := makeInputStyles(largeFont)
-	titleWidth := mustTextAdvance(menuFont, titleText)
+	titleWidth := mustTextAdvance(menuFont, titleText) + titleBoldInkExtra
 	numberWidth := mustTextAdvance(largeFont, "00/00")
 
 	app := newAppState()
@@ -273,7 +273,7 @@ func newResultViews(gadget *modgadget.Gadget) resultViews {
 }
 
 func renderSplash(views menuViews) error {
-	if err := views.title.SetText("<style=" + styleTitle + ">" + titleText + "</style>"); err != nil {
+	if err := views.title.SetText(titleMarkup); err != nil {
 		return err
 	}
 	for _, view := range views.menu {
@@ -285,7 +285,7 @@ func renderSplash(views menuViews) error {
 }
 
 func renderMenu(views menuViews, app *appState) error {
-	if err := views.title.SetText("<style=" + styleTitle + ">" + titleText + "</style>"); err != nil {
+	if err := views.title.SetText(titleMarkup); err != nil {
 		return err
 	}
 	for index, item := range courses {

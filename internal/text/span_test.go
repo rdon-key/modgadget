@@ -49,6 +49,92 @@ func TestMeasureSpansWhitespaceOnly(t *testing.T) {
 	}
 }
 
+func TestStyleZeroValueAndCopyPreserveBold(t *testing.T) {
+	if (Style{}).Bold {
+		t.Fatal("zero-value Style is bold")
+	}
+	original := Style{Bold: true}
+	copy := original
+	if !copy.Bold {
+		t.Fatal("Style copy lost Bold")
+	}
+}
+
+func TestBoldSpanMeasurementAndDrawing(t *testing.T) {
+	face := spanFace(font.Metrics{}, []font.GlyphInfo{
+		{Rune: 'a', Width: 3, Height: 1, AdvanceX: 3},
+		{Rune: 'b', BitmapOffset: 1, Width: 3, Height: 1, AdvanceX: 3},
+	}, "\x80\x80")
+	spans := []Span{
+		{Font: face, Value: "a", Foreground: 0x1234, Background: 0xabcd, Bold: true},
+		{Font: face, Value: "b", Foreground: 0x1234, Background: 0xabcd},
+	}
+	measurement, err := MeasureSpans(spans)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if measurement.Advance != 6 || measurement.Bounds.MaxX != 6 {
+		t.Fatalf("measurement=%+v", measurement)
+	}
+
+	backend := &fakeBackend{}
+	pen, err := DrawSpans(backend, spans, 0, 0, make([]byte, 8))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if pen != 6 {
+		t.Fatalf("advance=%d, want 6", pen)
+	}
+	if len(backend.rects) != 2 || backend.rects[0].Width != 4 || backend.rects[1].Width != 3 {
+		t.Fatalf("rects=%v", backend.rects)
+	}
+	wantBold := []byte{0x12, 0x34, 0x12, 0x34, 0xab, 0xcd, 0xab, 0xcd}
+	wantNormal := []byte{0x12, 0x34, 0xab, 0xcd, 0xab, 0xcd}
+	if string(backend.writes[0]) != string(wantBold) || string(backend.writes[1]) != string(wantNormal) {
+		t.Fatalf("writes=%x want=%x/%x", backend.writes, wantBold, wantNormal)
+	}
+}
+
+func TestBoldFinalGlyphInkFitsMeasurement(t *testing.T) {
+	face := spanFace(font.Metrics{}, []font.GlyphInfo{{Rune: 'x', Width: 2, Height: 1, AdvanceX: 2}}, "\x80")
+	measurement, err := MeasureSpans([]Span{{Font: face, Value: "x", Bold: true}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	backend := &fakeBackend{}
+	if _, err := DrawSpans(backend, []Span{{Font: face, Value: "x", Bold: true}}, 0, 0, make([]byte, 6)); err != nil {
+		t.Fatal(err)
+	}
+	if got := unionRects(backend.rects); got != measurement.Bounds {
+		t.Fatalf("drawn=%+v measurement=%+v", got, measurement)
+	}
+	if measurement.Advance != 2 || measurement.Bounds.MaxX != 3 {
+		t.Fatalf("measurement=%+v", measurement)
+	}
+}
+
+func TestBoldGlyphIsClippedByViewportBackend(t *testing.T) {
+	face := spanFace(font.Metrics{}, []font.GlyphInfo{{Rune: 'x', Width: 2, Height: 1, AdvanceX: 2}}, "\x80")
+	physical := &fakeBackend{}
+	viewport, err := display.NewViewport(display.Rect{X: 10, Y: 20, Width: 2, Height: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	backend, err := display.NewViewportBackend(physical, viewport)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := DrawSpans(backend, []Span{{Font: face, Value: "x", Bold: true}}, 1, 0, make([]byte, 6)); err != nil {
+		t.Fatal(err)
+	}
+	if len(physical.rects) != 1 || physical.rects[0] != (display.Rect{X: 11, Y: 20, Width: 1, Height: 1}) {
+		t.Fatalf("physical rects=%v", physical.rects)
+	}
+	if len(physical.writes) != 1 || len(physical.writes[0]) != 2 {
+		t.Fatalf("physical writes=%x", physical.writes)
+	}
+}
+
 func TestMeasureSpansPartialErrors(t *testing.T) {
 	first := spanFace(font.Metrics{}, []font.GlyphInfo{{Rune: 'a', AdvanceX: 3}}, "")
 	second := spanFace(font.Metrics{}, []font.GlyphInfo{{Rune: 'b', AdvanceX: 2}}, "")

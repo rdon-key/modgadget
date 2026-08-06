@@ -13,7 +13,8 @@ contain 20 playable questions.
 4. Enter starts the selected course.
 5. Completing all 20 questions shows the final time and miss count.
 
-The 16-dot title is centered from its measured glyph width. One fixed outer
+The 16-dot title is centered from its measured glyph width; `Rdon ` is normal
+and only `Type 100` uses the synthetic bold style. One fixed outer
 frame surrounds all five menu rows; individual rows have no boxes or divider
 lines. The 24-dot guide scrolls in red along the bottom of the display.
 

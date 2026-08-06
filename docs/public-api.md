@@ -187,6 +187,7 @@ type Style struct {
 	Font       Font
 	Foreground Color565
 	Background Color565
+	Bold       bool
 }
 
 type StyleEntry struct {
@@ -208,6 +209,9 @@ Example markup:
 
 `Foreground` is used for set glyph pixels. `Background` is used within glyph
 rectangles. The whole Viewport is first filled with the Default background.
+`Bold` uses synthetic bold rendering: set bitmap pixels are extended one pixel
+to the right without changing the font asset or glyph advance. Its zero value
+is false, so existing text rendering is unchanged.
 
 ## Gadget
 
@@ -296,6 +300,8 @@ text, and marks the Viewport dirty. Supported markup is:
 | --- | --- |
 | `<style=name>` | Select a named Style |
 | `</style>` | Restore the surrounding Style |
+| `<b>` | Enable synthetic bold while preserving the current Style |
+| `</b>` | Restore the Style in effect before `<b>` |
 | `<br>` | Line break |
 | `<br/>` | Line break |
 | `<<` | Literal `<` |

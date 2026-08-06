@@ -1,5 +1,10 @@
 # text/markup
 
+`<b>...</b>` enables `Style.Bold` while preserving the current font and
+colors. Closing the tag restores the complete surrounding Style, including in
+nested named styles. Bold is synthetic: glyph ink is extended one pixel to the
+right without changing the bitmap font asset or glyph advance.
+
 `markup`は小さなタグ付き文字列を`[]text.Span`へ変換します。対応する構文は
 `<style=name>`、`</style>`、`<br>`、`<br/>`、および`<`を表す`<<`です。
 style tagは最大16段までnestでき、終了時には直前のStyleへ戻ります。タグ名は
@@ -37,4 +42,4 @@ spans, err := parser.Parse(
 ```
 
 inlineのfont、size、color指定、HTML entity、cascade、selector、継承、複数class、
-bold、italic、alignment、image、link、CSSには対応しません。
+italic、alignment、image、link、CSSには対応しません。

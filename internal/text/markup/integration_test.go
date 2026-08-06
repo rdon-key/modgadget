@@ -128,6 +128,7 @@ func TestRealFontIntegrationAllocations(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	spans[0].Bold = true
 	sink := &integrationSink{}
 	scratch := [48]byte{}
 	tests := []struct {

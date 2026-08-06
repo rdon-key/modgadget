@@ -13,6 +13,7 @@ type Span struct {
 	Value      string
 	Foreground display.Color565
 	Background display.Color565
+	Bold       bool
 }
 
 // MeasureSpans measures a single baseline-aligned line of spans.
@@ -25,7 +26,7 @@ func MeasureSpans(spans []Span) (Measurement, error) {
 			return measurement, err
 		}
 		var err error
-		measurement, err = measureValue(measurement, span.Font, span.Value)
+		measurement, err = measureStyledValue(measurement, span.Font, span.Value, span.Bold)
 		if err != nil {
 			return measurement, err
 		}
@@ -49,7 +50,7 @@ func DrawSpans(backend display.Backend, spans []Span, penX, baselineY int16, scr
 			return currentX, err
 		}
 		var err error
-		currentX, err = drawFontValue(backend, span.Font, currentX, baselineY, span.Value, span.Foreground, span.Background, scratch)
+		currentX, err = drawStyledFontValue(backend, span.Font, currentX, baselineY, span.Value, span.Foreground, span.Background, span.Bold, scratch)
 		if err != nil {
 			return currentX, err
 		}

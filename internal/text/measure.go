@@ -41,11 +41,19 @@ func MeasureString(font Font, value string) (Measurement, error) {
 }
 
 func measureValue(measurement Measurement, face Font, value string) (Measurement, error) {
-	measurement, _, err := measureValueProgress(measurement, face, value)
+	return measureStyledValue(measurement, face, value, false)
+}
+
+func measureStyledValue(measurement Measurement, face Font, value string, bold bool) (Measurement, error) {
+	measurement, _, err := measureStyledValueProgress(measurement, face, value, bold)
 	return measurement, err
 }
 
 func measureValueProgress(measurement Measurement, face Font, value string) (Measurement, bool, error) {
+	return measureStyledValueProgress(measurement, face, value, false)
+}
+
+func measureStyledValueProgress(measurement Measurement, face Font, value string, bold bool) (Measurement, bool, error) {
 	processed := false
 	for _, r := range value {
 		position, err := positionGlyph(face, r, measurement.Advance, 0)
@@ -55,6 +63,9 @@ func measureValueProgress(measurement Measurement, face Font, value string) (Mea
 		glyph := position.glyph
 		if glyph.Width != 0 && glyph.Height != 0 {
 			maxX := int32(position.x) + int32(glyph.Width)
+			if bold {
+				maxX++
+			}
 			maxY := int32(position.y) + int32(glyph.Height)
 			if maxX < math.MinInt16 || maxX > math.MaxInt16 {
 				return measurement, processed, fmt.Errorf("text: glyph U+%04X maximum X coordinate is outside int16", r)

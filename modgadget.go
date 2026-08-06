@@ -182,6 +182,13 @@ func (v *Viewport) SetText(value string) error {
 		return v.parseErr
 	}
 	v.layout, v.textWidth, v.parseErr = layout, layout.Measurement().MaxAdvanceX, nil
+	hasBold := false
+	for i := range spans {
+		hasBold = hasBold || spans[i].Bold
+	}
+	if measurement := layout.Measurement(); hasBold && measurement.HasInk && measurement.Bounds.MaxX > v.textWidth {
+		v.textWidth = measurement.Bounds.MaxX
+	}
 	if v.scroll.fromLeft || v.scroll.fromRight {
 		v.offset = v.initialScrollOffset()
 	}
@@ -189,8 +196,14 @@ func (v *Viewport) SetText(value string) error {
 	for i := range spans {
 		for _, r := range spans[i].Value {
 			if r != '\n' {
-				if glyph, ok := spans[i].Font.Lookup(r); ok && glyph.Width > maxGlyphWidth {
-					maxGlyphWidth = glyph.Width
+				if glyph, ok := spans[i].Font.Lookup(r); ok {
+					width := glyph.Width
+					if spans[i].Bold && width < math.MaxInt16 {
+						width++
+					}
+					if width > maxGlyphWidth {
+						maxGlyphWidth = width
+					}
 				}
 			}
 		}

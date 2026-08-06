@@ -9,6 +9,7 @@ import (
 	audio "github.com/rdon-key/modgadget/internal/audio/cardputeradv"
 	"github.com/rdon-key/modgadget/internal/fontdata/mgf/efont16"
 	"github.com/rdon-key/modgadget/internal/fontdata/mgf/efont24"
+	"github.com/rdon-key/modgadget/internal/text/markup"
 )
 
 func keyDown(code modgadget.KeyCode) modgadget.KeyEvent {
@@ -299,12 +300,30 @@ func TestTitleCenteringFromMeasuredWidth(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	width += titleBoldInkExtra
 	x := centeredTitleX(width)
 	left, right := x, displayWidth-(x+width)
 	if x < 0 || x+width > displayWidth || left-right < -1 || left-right > 1 {
 		t.Fatalf("title width=%d x=%d margins=%d/%d", width, x, left, right)
 	}
 	t.Logf("title width=%d x=%d margins=%d/%d", width, x, left, right)
+}
+
+func TestTitleMarksOnlyType100Bold(t *testing.T) {
+	font := modgadget.NewMGFFont(efont16.Font)
+	spans, err := (markup.Parser{Styles: makeStyles(font, modgadget.NewMGFFont(efont24.Font))}).Parse(titleMarkup)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(spans) != 2 {
+		t.Fatalf("spans=%+v", spans)
+	}
+	if spans[0].Value != "Rdon " || spans[0].Bold {
+		t.Fatalf("normal span=%+v", spans[0])
+	}
+	if spans[1].Value != "Type 100" || !spans[1].Bold {
+		t.Fatalf("bold span=%+v", spans[1])
+	}
 }
 
 func TestMenuFrameContainsRowsWithoutOverlap(t *testing.T) {

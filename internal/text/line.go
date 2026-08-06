@@ -45,7 +45,7 @@ func measureLine(spans []Span) (LineMeasurement, bool, error) {
 
 		var spanProcessed bool
 		var err error
-		line.Measurement, spanProcessed, err = measureValueProgress(line.Measurement, span.Font, span.Value)
+		line.Measurement, spanProcessed, err = measureStyledValueProgress(line.Measurement, span.Font, span.Value, span.Bold)
 		processed = processed || spanProcessed
 		if err != nil {
 			return line, processed, err

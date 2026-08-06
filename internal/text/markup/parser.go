@@ -12,6 +12,13 @@ import (
 
 const maximumNestingDepth = 16
 
+type tagKind uint8
+
+const (
+	tagStyle tagKind = iota + 1
+	tagBold
+)
+
 // Parser holds the styles used while parsing markup.
 type Parser struct {
 	Styles text.StyleSet
@@ -62,6 +69,7 @@ func (parser Parser) parse(destination []text.Span, value string, countOnly bool
 
 	current := parser.Styles.Default
 	var stack [maximumNestingDepth]text.Style
+	var tags [maximumNestingDepth]tagKind
 	depth := 0
 	emitted := 0
 	startLength := len(destination)
@@ -79,7 +87,7 @@ func (parser Parser) parse(destination []text.Span, value string, countOnly bool
 		}
 		destination = append(destination, text.Span{
 			Font: current.Font, Value: value,
-			Foreground: current.Foreground, Background: current.Background,
+			Foreground: current.Foreground, Background: current.Background, Bold: current.Bold,
 		})
 		return nil
 	}
@@ -115,8 +123,22 @@ func (parser Parser) parse(destination []text.Span, value string, countOnly bool
 
 		switch tag {
 		case "</style>":
-			if depth == 0 {
+			if depth == 0 || tags[depth-1] != tagStyle {
 				return destination, emitted, syntaxError(offset, "unexpected closing style tag")
+			}
+			depth--
+			current = stack[depth]
+		case "<b>":
+			if depth == len(stack) {
+				return destination, emitted, syntaxError(offset, "nesting is too deep")
+			}
+			stack[depth] = current
+			tags[depth] = tagBold
+			depth++
+			current.Bold = true
+		case "</b>":
+			if depth == 0 || tags[depth-1] != tagBold {
+				return destination, emitted, syntaxError(offset, "unexpected closing bold tag")
 			}
 			depth--
 			current = stack[depth]
@@ -143,7 +165,11 @@ func (parser Parser) parse(destination []text.Span, value string, countOnly bool
 				return destination, emitted, syntaxError(offset, "nesting is too deep")
 			}
 			stack[depth] = current
+			tags[depth] = tagStyle
 			depth++
+			if current.Bold {
+				selected.Bold = true
+			}
 			current = selected
 		}
 		offset = end + 1

@@ -76,6 +76,64 @@ func TestParseStyleSwitchAndRestore(t *testing.T) {
 	}
 }
 
+func TestParseBoldAndRestore(t *testing.T) {
+	parser, _, _, _ := testParser()
+	spans, err := parser.Parse("plain <b>bold</b> plain")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(spans) != 3 || spans[0].Bold || !spans[1].Bold || spans[2].Bold {
+		t.Fatalf("spans=%+v", spans)
+	}
+	if concatenateValues(spans) != "plain bold plain" {
+		t.Fatalf("values=%q", concatenateValues(spans))
+	}
+}
+
+func TestParseBoldNestedInStyleRestoresCompleteStyle(t *testing.T) {
+	parser, _, _, _ := testParser()
+	spans, err := parser.Parse("<style=medium>normal <b>bold</b> normal</style> plain")
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantFonts := []int16{16, 16, 16, 12}
+	wantBold := []bool{false, true, false, false}
+	for index := range spans {
+		if fontIdentifier(t, spans[index].Font) != wantFonts[index] || spans[index].Bold != wantBold[index] {
+			t.Fatalf("span %d=%+v", index, spans[index])
+		}
+	}
+	for _, span := range spans[:3] {
+		if span.Foreground != display.ColorGreen || span.Background != display.ColorBlack {
+			t.Fatalf("nested style was not preserved: %+v", span)
+		}
+	}
+}
+
+func TestParseStyleNestedInBoldRemainsBold(t *testing.T) {
+	parser, _, _, _ := testParser()
+	spans, err := parser.Parse("<b>bold <style=medium>medium bold</style> bold</b> plain")
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantBold := []bool{true, true, true, false}
+	wantFonts := []int16{12, 16, 12, 12}
+	for index := range spans {
+		if spans[index].Bold != wantBold[index] || fontIdentifier(t, spans[index].Font) != wantFonts[index] {
+			t.Fatalf("span %d=%+v", index, spans[index])
+		}
+	}
+}
+
+func TestParseBoldErrors(t *testing.T) {
+	parser, _, _, _ := testParser()
+	for _, value := range []string{"</b>", "<b>x", "<b><style=medium>x</b></style>"} {
+		if spans, err := parser.Parse(value); err == nil || spans != nil {
+			t.Fatalf("value=%q spans=%+v err=%v", value, spans, err)
+		}
+	}
+}
+
 func TestParseNestedStyles(t *testing.T) {
 	parser, _, _, _ := testParser()
 	spans, err := parser.Parse("<style=medium>A<style=large-red>B<style=inverse>C</style>D</style>E</style>F")
@@ -209,7 +267,7 @@ func TestNestingDepth(t *testing.T) {
 
 func TestParseInto(t *testing.T) {
 	parser, _, _, _ := testParser()
-	value := "a<style=medium>b<style=large-red>c</style>d</style>e<br>f"
+	value := "a<style=medium>b<b>c</b>d</style>e<br>f"
 	want, err := parser.Parse(value)
 	if err != nil {
 		t.Fatal(err)
@@ -245,7 +303,7 @@ func assertSameSpans(t *testing.T, got, want []text.Span) {
 		t.Fatalf("len=%d want=%d", len(got), len(want))
 	}
 	for index := range got {
-		if got[index].Value != want[index].Value || got[index].Foreground != want[index].Foreground || got[index].Background != want[index].Background || fontIdentifier(t, got[index].Font) != fontIdentifier(t, want[index].Font) {
+		if got[index].Value != want[index].Value || got[index].Foreground != want[index].Foreground || got[index].Background != want[index].Background || got[index].Bold != want[index].Bold || fontIdentifier(t, got[index].Font) != fontIdentifier(t, want[index].Font) {
 			t.Fatalf("span %d got=%+v want=%+v", index, got[index], want[index])
 		}
 	}
