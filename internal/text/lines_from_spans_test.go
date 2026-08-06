@@ -3,8 +3,6 @@ package text
 import (
 	"strings"
 	"testing"
-
-	"github.com/rdon-key/modgadget-fonts/font"
 )
 
 func TestLinesFromSpansEmptyInputs(t *testing.T) {
@@ -19,7 +17,7 @@ func TestLinesFromSpansEmptyInputs(t *testing.T) {
 }
 
 func TestLinesFromSpansSplitsNewlinesAndRetainsEmptySegments(t *testing.T) {
-	face := spanFace(font.Metrics{}, nil, "")
+	face := spanFace(FontMetrics{}, nil, "")
 	tests := []struct {
 		name  string
 		value string
@@ -60,8 +58,8 @@ func TestLinesFromSpansSplitsNewlinesAndRetainsEmptySegments(t *testing.T) {
 }
 
 func TestLinesFromSpansCRAndLFAcrossSpanBoundary(t *testing.T) {
-	faceA := spanFace(font.Metrics{}, nil, "")
-	faceB := spanFace(font.Metrics{}, nil, "")
+	faceA := spanFace(FontMetrics{}, nil, "")
+	faceB := spanFace(FontMetrics{}, nil, "")
 	lines, err := LinesFromSpans([]Span{{Font: faceA, Value: "\r"}, {Font: faceB, Value: "\n"}})
 	if err != nil || len(lines) != 2 {
 		t.Fatalf("lines=%v err=%v", lines, err)
@@ -75,8 +73,8 @@ func TestLinesFromSpansCRAndLFAcrossSpanBoundary(t *testing.T) {
 }
 
 func TestLinesFromSpansPreservesSpanOrderAcrossLines(t *testing.T) {
-	faceA := spanFace(font.Metrics{}, nil, "")
-	faceB := spanFace(font.Metrics{}, nil, "")
+	faceA := spanFace(FontMetrics{}, nil, "")
+	faceB := spanFace(FontMetrics{}, nil, "")
 	spans := []Span{
 		{Font: faceA, Value: "a\n", Foreground: 1, Background: 2},
 		{Font: faceB, Value: "b\nc", Foreground: 3, Background: 4},
@@ -112,7 +110,7 @@ func TestLinesFromSpansPreservesSpanOrderAcrossLines(t *testing.T) {
 }
 
 func TestLinesFromSpansMultipleSpansWithoutNewline(t *testing.T) {
-	face := spanFace(font.Metrics{}, nil, "")
+	face := spanFace(FontMetrics{}, nil, "")
 	lines, err := LinesFromSpans([]Span{{Font: face, Value: "Hello "}, {Font: face, Value: "world"}})
 	if err != nil || len(lines) != 1 || len(lines[0].Spans) != 2 || lines[0].Spans[0].Value != "Hello " || lines[0].Spans[1].Value != "world" {
 		t.Fatalf("lines=%v err=%v", lines, err)
@@ -120,7 +118,7 @@ func TestLinesFromSpansMultipleSpansWithoutNewline(t *testing.T) {
 }
 
 func TestLinesFromSpansValidationReturnsPartialLines(t *testing.T) {
-	face := spanFace(font.Metrics{}, nil, "")
+	face := spanFace(FontMetrics{}, nil, "")
 	tests := []struct {
 		name string
 		bad  Span
@@ -144,7 +142,7 @@ func TestLinesFromSpansValidationReturnsPartialLines(t *testing.T) {
 }
 
 func TestLinesFromSpansMeasureLinesIntegration(t *testing.T) {
-	face := spanFace(font.Metrics{Ascent: 2, Descent: 1}, []font.GlyphInfo{{Rune: 'a', Width: 1, Height: 1, AdvanceX: 2, BearingY: 1}}, "\x80")
+	face := spanFace(FontMetrics{Ascent: 2, Descent: 1}, []testGlyphInfo{{Rune: 'a', Width: 1, Height: 1, AdvanceX: 2, BearingY: 1}}, "\x80")
 	lines, err := LinesFromSpans([]Span{{Font: face, Value: "a\na"}})
 	if err != nil || len(lines) != 2 {
 		t.Fatalf("lines=%v err=%v", lines, err)

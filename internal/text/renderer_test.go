@@ -6,7 +6,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/rdon-key/modgadget-fonts/font"
 	"github.com/rdon-key/modgadget/internal/display"
 )
 
@@ -30,8 +29,8 @@ func (b *fakeBackend) WritePixels(data []byte) error {
 }
 func (b *fakeBackend) EndRect() error { b.endCalls++; return b.endErr }
 
-func newFace(glyphs []font.GlyphInfo, bitmap string) Font {
-	return spanFace(font.Metrics{}, glyphs, bitmap)
+func newFace(glyphs []testGlyphInfo, bitmap string) Font {
+	return spanFace(FontMetrics{}, glyphs, bitmap)
 }
 
 func TestDrawStringEmptyReturnsInitialPen(t *testing.T) {
@@ -43,7 +42,7 @@ func TestDrawStringEmptyReturnsInitialPen(t *testing.T) {
 }
 
 func TestDrawStringVariableGlyphsBearingsAndBaseline(t *testing.T) {
-	face := newFace([]font.GlyphInfo{
+	face := newFace([]testGlyphInfo{
 		{Rune: 'A', Width: 3, Height: 2, AdvanceX: 5, BearingX: 2, BearingY: 3},
 		{Rune: 'B', BitmapOffset: 2, Width: 1, Height: 3, AdvanceX: 2, BearingX: -1},
 		{Rune: 'C', BitmapOffset: 5, Width: 2, Height: 1, AdvanceX: 4, BearingY: -2},
@@ -82,7 +81,7 @@ func TestDrawStringVariableGlyphsBearingsAndBaseline(t *testing.T) {
 
 func TestDrawStringIgnoresUnusedBits(t *testing.T) {
 	b := &fakeBackend{}
-	face := newFace([]font.GlyphInfo{{Rune: 'x', Width: 9, Height: 1, AdvanceX: 9}}, "\x80\x7f")
+	face := newFace([]testGlyphInfo{{Rune: 'x', Width: 9, Height: 1, AdvanceX: 9}}, "\x80\x7f")
 	_, err := DrawString(b, face, 0, 0, "x", 0xffff, 0, make([]byte, 18))
 	if err != nil {
 		t.Fatal(err)
@@ -94,7 +93,7 @@ func TestDrawStringIgnoresUnusedBits(t *testing.T) {
 
 func TestDrawStringEmptyGlyphAdvancesWithoutDrawing(t *testing.T) {
 	b := &fakeBackend{}
-	face := newFace([]font.GlyphInfo{{Rune: ' ', Width: 0, Height: 3, AdvanceX: 5, BearingX: -2, BearingY: -1}}, "")
+	face := newFace([]testGlyphInfo{{Rune: ' ', Width: 0, Height: 3, AdvanceX: 5, BearingX: -2, BearingY: -1}}, "")
 	pen, err := DrawString(b, face, 4, 6, " ", 0, 0, nil)
 	if err != nil || pen != 9 || b.beginCalls != 0 {
 		t.Fatalf("pen=%d err=%v calls=%d", pen, err, b.beginCalls)
@@ -102,7 +101,7 @@ func TestDrawStringEmptyGlyphAdvancesWithoutDrawing(t *testing.T) {
 }
 
 func TestDrawStringValidationAndOverflow(t *testing.T) {
-	valid := newFace([]font.GlyphInfo{{Rune: 'a', Width: 1, Height: 1, AdvanceX: 1}}, "\x80")
+	valid := newFace([]testGlyphInfo{{Rune: 'a', Width: 1, Height: 1, AdvanceX: 1}}, "\x80")
 	tests := []struct {
 		name    string
 		backend display.Backend
@@ -114,9 +113,9 @@ func TestDrawStringValidationAndOverflow(t *testing.T) {
 		{"nil backend", nil, valid, "a", 0, 0, make([]byte, 2)}, {"nil font", &fakeBackend{}, nil, "a", 0, 0, make([]byte, 2)},
 		{"invalid UTF-8", &fakeBackend{}, valid, string([]byte{0xff}), 0, 0, make([]byte, 2)}, {"missing glyph", &fakeBackend{}, valid, "z", 0, 0, make([]byte, 2)},
 		{"scratch short", &fakeBackend{}, valid, "a", 0, 0, make([]byte, 1)},
-		{"pen plus bearing overflow", &fakeBackend{}, newFace([]font.GlyphInfo{{Rune: 'a', Width: 1, Height: 1, BearingX: 1}}, "\x80"), "a", math.MaxInt16, 0, make([]byte, 2)},
-		{"baseline minus bearing overflow", &fakeBackend{}, newFace([]font.GlyphInfo{{Rune: 'a', Width: 1, Height: 1, BearingY: 1}}, "\x80"), "a", 0, math.MinInt16, make([]byte, 2)},
-		{"pen plus advance overflow", &fakeBackend{}, newFace([]font.GlyphInfo{{Rune: 'a', AdvanceX: 1}}, ""), "a", math.MaxInt16, 0, nil},
+		{"pen plus bearing overflow", &fakeBackend{}, newFace([]testGlyphInfo{{Rune: 'a', Width: 1, Height: 1, BearingX: 1}}, "\x80"), "a", math.MaxInt16, 0, make([]byte, 2)},
+		{"baseline minus bearing overflow", &fakeBackend{}, newFace([]testGlyphInfo{{Rune: 'a', Width: 1, Height: 1, BearingY: 1}}, "\x80"), "a", 0, math.MinInt16, make([]byte, 2)},
+		{"pen plus advance overflow", &fakeBackend{}, newFace([]testGlyphInfo{{Rune: 'a', AdvanceX: 1}}, ""), "a", math.MaxInt16, 0, nil},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -128,7 +127,7 @@ func TestDrawStringValidationAndOverflow(t *testing.T) {
 }
 
 func TestDrawStringMissingGlyphReturnsCurrentPen(t *testing.T) {
-	face := newFace([]font.GlyphInfo{{Rune: 'a', AdvanceX: 3}}, "")
+	face := newFace([]testGlyphInfo{{Rune: 'a', AdvanceX: 3}}, "")
 	pen, err := DrawString(&fakeBackend{}, face, 7, 0, "az", 0, 0, nil)
 	if err == nil || pen != 10 || !strings.Contains(err.Error(), "U+007A") {
 		t.Fatalf("pen=%d err=%v", pen, err)
@@ -137,7 +136,7 @@ func TestDrawStringMissingGlyphReturnsCurrentPen(t *testing.T) {
 
 func TestDrawStringBackendErrors(t *testing.T) {
 	sentinel := errors.New("backend failure")
-	face := newFace([]font.GlyphInfo{{Rune: 'a', Width: 1, Height: 1, AdvanceX: 2}}, "\x80")
+	face := newFace([]testGlyphInfo{{Rune: 'a', Width: 1, Height: 1, AdvanceX: 2}}, "\x80")
 	tests := []struct {
 		name      string
 		configure func(*fakeBackend)
@@ -155,7 +154,7 @@ func TestDrawStringBackendErrors(t *testing.T) {
 }
 
 func TestDrawStringReusesScratch(t *testing.T) {
-	face := newFace([]font.GlyphInfo{{Rune: 'a', Width: 1, Height: 1, AdvanceX: 1}, {Rune: 'b', BitmapOffset: 1, Width: 1, Height: 1, AdvanceX: 1}}, "\x80\x00")
+	face := newFace([]testGlyphInfo{{Rune: 'a', Width: 1, Height: 1, AdvanceX: 1}, {Rune: 'b', BitmapOffset: 1, Width: 1, Height: 1, AdvanceX: 1}}, "\x80\x00")
 	b := &fakeBackend{}
 	scratch := []byte{0xee, 0xee}
 	pen, err := DrawString(b, face, 0, 0, "ab", 0xffff, 0, scratch)

@@ -5,7 +5,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/rdon-key/modgadget-fonts/font"
 	"github.com/rdon-key/modgadget/internal/display"
 )
 
@@ -53,7 +52,7 @@ func TestWrapSpansGreedyAdvance(t *testing.T) {
 }
 
 func TestWrapSpansKeepsOversizedGlyphAloneBeforeNegativeAdvance(t *testing.T) {
-	face := spanFace(font.Metrics{}, []font.GlyphInfo{
+	face := spanFace(FontMetrics{}, []testGlyphInfo{
 		{Rune: 'a', AdvanceX: 5},
 		{Rune: 'b', AdvanceX: -3},
 		{Rune: 'c', AdvanceX: 2},
@@ -135,7 +134,7 @@ func TestWrapSpansKeepsExplicitEmptySpanWithoutAutomaticEmptySpan(t *testing.T) 
 }
 
 func TestWrapSpansDoesNotSplitUTF8Rune(t *testing.T) {
-	face := spanFace(font.Metrics{}, []font.GlyphInfo{{Rune: '日', AdvanceX: 4}, {Rune: '本', AdvanceX: 4}, {Rune: '語', AdvanceX: 4}}, "")
+	face := spanFace(FontMetrics{}, []testGlyphInfo{{Rune: '日', AdvanceX: 4}, {Rune: '本', AdvanceX: 4}, {Rune: '語', AdvanceX: 4}}, "")
 	lines, err := WrapSpans([]Span{{Font: face, Value: "日本語"}}, 8)
 	if err != nil || !sameSingleSpanLines(lines, []string{"日本", "語"}) {
 		t.Fatalf("lines=%v err=%v", lines, err)
@@ -181,7 +180,7 @@ func TestWrapSpansErrorsAndPartialResult(t *testing.T) {
 		}
 	})
 	t.Run("advance overflow", func(t *testing.T) {
-		overflowFace := spanFace(font.Metrics{}, []font.GlyphInfo{{Rune: 'a', AdvanceX: math.MaxInt16}}, "")
+		overflowFace := spanFace(FontMetrics{}, []testGlyphInfo{{Rune: 'a', AdvanceX: math.MaxInt16}}, "")
 		lines, err := WrapSpans([]Span{{Font: overflowFace, Value: "aa"}}, math.MaxInt16)
 		if err == nil || len(lines) != 0 || !strings.Contains(err.Error(), "span 0") || !strings.Contains(err.Error(), "U+0061") {
 			t.Fatalf("lines=%v err=%v", lines, err)
@@ -199,7 +198,7 @@ func TestNewWrappedTextLayoutEmptyInputIsZeroValue(t *testing.T) {
 }
 
 func TestWrappedTextLayoutIntegration(t *testing.T) {
-	face := spanFace(font.Metrics{Ascent: 2, Descent: 1}, []font.GlyphInfo{
+	face := spanFace(FontMetrics{Ascent: 2, Descent: 1}, []testGlyphInfo{
 		{Rune: 'a', Width: 1, Height: 1, AdvanceX: 4, BearingY: 1},
 		{Rune: 'b', BitmapOffset: 1, Width: 1, Height: 1, AdvanceX: 4, BearingY: 1},
 	}, "\x80\x80")
@@ -239,20 +238,20 @@ func TestWrappedTextLayoutIntegration(t *testing.T) {
 
 func asciiAdvanceFace(chars string, advance int16) Font {
 	seen := map[rune]bool{}
-	glyphs := make([]font.GlyphInfo, 0, len(chars))
+	glyphs := make([]testGlyphInfo, 0, len(chars))
 	for _, r := range chars {
 		if r == '\n' || seen[r] {
 			continue
 		}
 		seen[r] = true
-		glyphs = append(glyphs, font.GlyphInfo{Rune: r, AdvanceX: advance})
+		glyphs = append(glyphs, testGlyphInfo{Rune: r, AdvanceX: advance})
 	}
 	for left := 1; left < len(glyphs); left++ {
 		for right := left; right > 0 && glyphs[right].Rune < glyphs[right-1].Rune; right-- {
 			glyphs[right], glyphs[right-1] = glyphs[right-1], glyphs[right]
 		}
 	}
-	return spanFace(font.Metrics{}, glyphs, "")
+	return spanFace(FontMetrics{}, glyphs, "")
 }
 
 func sameSingleSpanLines(lines []Line, values []string) bool {

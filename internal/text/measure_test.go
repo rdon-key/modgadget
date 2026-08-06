@@ -4,8 +4,6 @@ import (
 	"math"
 	"strings"
 	"testing"
-
-	"github.com/rdon-key/modgadget-fonts/font"
 )
 
 func TestMeasureStringEmpty(t *testing.T) {
@@ -16,7 +14,7 @@ func TestMeasureStringEmpty(t *testing.T) {
 }
 
 func TestMeasureStringOneGlyph(t *testing.T) {
-	face := newFace([]font.GlyphInfo{{Rune: 'a', Width: 3, Height: 5, AdvanceX: 4, BearingX: 1, BearingY: 4}}, strings.Repeat("\x00", 5))
+	face := newFace([]testGlyphInfo{{Rune: 'a', Width: 3, Height: 5, AdvanceX: 4, BearingX: 1, BearingY: 4}}, strings.Repeat("\x00", 5))
 	want := Measurement{Advance: 4, Bounds: Bounds{MinX: 1, MinY: -4, MaxX: 4, MaxY: 1}, HasInk: true}
 	got, err := MeasureString(face, "a")
 	if err != nil || got != want {
@@ -34,7 +32,7 @@ func TestMeasureStringVariableGlyphsSpacesAndBearings(t *testing.T) {
 }
 
 func TestMeasureStringSpacesHaveAdvanceWithoutInk(t *testing.T) {
-	face := newFace([]font.GlyphInfo{{Rune: ' ', AdvanceX: 3}}, "")
+	face := newFace([]testGlyphInfo{{Rune: ' ', AdvanceX: 3}}, "")
 	got, err := MeasureString(face, "  ")
 	if err != nil || got.Advance != 6 || got.HasInk || got.Bounds != (Bounds{}) {
 		t.Fatalf("measurement=%+v err=%v", got, err)
@@ -42,7 +40,7 @@ func TestMeasureStringSpacesHaveAdvanceWithoutInk(t *testing.T) {
 }
 
 func TestMeasureStringInkCanExtendLeftOfOriginAndBeyondAdvance(t *testing.T) {
-	face := newFace([]font.GlyphInfo{{Rune: 'x', Width: 4, Height: 1, AdvanceX: -2, BearingX: -3}}, "\x00")
+	face := newFace([]testGlyphInfo{{Rune: 'x', Width: 4, Height: 1, AdvanceX: -2, BearingX: -3}}, "\x00")
 	got, err := MeasureString(face, "x")
 	want := Measurement{Advance: -2, Bounds: Bounds{MinX: -3, MinY: 0, MaxX: 1, MaxY: 1}, HasInk: true}
 	if err != nil || got != want {
@@ -60,12 +58,12 @@ func TestMeasureStringErrors(t *testing.T) {
 	}{
 		{"missing glyph", newFace(nil, ""), "z", "U+007A"},
 		{"invalid UTF-8", newFace(nil, ""), string([]byte{0xff}), ""},
-		{"glyph X overflow after positive advance", newFace([]font.GlyphInfo{{Rune: 'a', AdvanceX: math.MaxInt16}, {Rune: 'b', Width: 1, Height: 1, BearingX: 1}}, oneByte), "ab", "U+0062"},
-		{"glyph X overflow after negative advance", newFace([]font.GlyphInfo{{Rune: 'a', AdvanceX: math.MinInt16}, {Rune: 'b', Width: 1, Height: 1, BearingX: -1}}, oneByte), "ab", "U+0062"},
-		{"glyph maximum X overflow", newFace([]font.GlyphInfo{{Rune: 'a', Width: math.MaxInt16, Height: 1, BearingX: 1}}, strings.Repeat("\x00", 4096)), "a", "U+0061"},
-		{"glyph Y overflow from bearing", newFace([]font.GlyphInfo{{Rune: 'a', Width: 1, Height: 1, BearingY: math.MinInt16}}, oneByte), "a", "U+0061"},
-		{"glyph maximum Y overflow", newFace([]font.GlyphInfo{{Rune: 'a', Width: 1, Height: 1, BearingY: -math.MaxInt16}}, oneByte), "a", "U+0061"},
-		{"advance overflow", newFace([]font.GlyphInfo{{Rune: 'a', AdvanceX: math.MaxInt16}}, ""), "aa", "U+0061"},
+		{"glyph X overflow after positive advance", newFace([]testGlyphInfo{{Rune: 'a', AdvanceX: math.MaxInt16}, {Rune: 'b', Width: 1, Height: 1, BearingX: 1}}, oneByte), "ab", "U+0062"},
+		{"glyph X overflow after negative advance", newFace([]testGlyphInfo{{Rune: 'a', AdvanceX: math.MinInt16}, {Rune: 'b', Width: 1, Height: 1, BearingX: -1}}, oneByte), "ab", "U+0062"},
+		{"glyph maximum X overflow", newFace([]testGlyphInfo{{Rune: 'a', Width: math.MaxInt16, Height: 1, BearingX: 1}}, strings.Repeat("\x00", 4096)), "a", "U+0061"},
+		{"glyph Y overflow from bearing", newFace([]testGlyphInfo{{Rune: 'a', Width: 1, Height: 1, BearingY: math.MinInt16}}, oneByte), "a", "U+0061"},
+		{"glyph maximum Y overflow", newFace([]testGlyphInfo{{Rune: 'a', Width: 1, Height: 1, BearingY: -math.MaxInt16}}, oneByte), "a", "U+0061"},
+		{"advance overflow", newFace([]testGlyphInfo{{Rune: 'a', AdvanceX: math.MaxInt16}}, ""), "aa", "U+0061"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -109,7 +107,7 @@ func TestMeasureStringMatchesDrawString(t *testing.T) {
 }
 
 func measurementFace() Font {
-	return newFace([]font.GlyphInfo{
+	return newFace([]testGlyphInfo{
 		{Rune: ' ', AdvanceX: 3},
 		{Rune: 'A', Width: 3, Height: 5, AdvanceX: 4, BearingX: 1, BearingY: 4},
 		{Rune: 'B', BitmapOffset: 5, Width: 2, Height: 2, AdvanceX: 3, BearingX: -2},

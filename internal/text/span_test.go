@@ -6,7 +6,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/rdon-key/modgadget-fonts/font"
 	"github.com/rdon-key/modgadget/internal/display"
 )
 
@@ -20,11 +19,11 @@ func TestMeasureSpansEmpty(t *testing.T) {
 }
 
 func TestMeasureSpansAcrossFaces(t *testing.T) {
-	faceA := spanFace(font.Metrics{Ascent: 8, Descent: 2}, []font.GlyphInfo{
+	faceA := spanFace(FontMetrics{Ascent: 8, Descent: 2}, []testGlyphInfo{
 		{Rune: ' ', AdvanceX: 2},
 		{Rune: 'A', Width: 3, Height: 4, AdvanceX: 5, BearingX: 1, BearingY: 3},
 	}, strings.Repeat("\x00", 4))
-	faceB := spanFace(font.Metrics{Ascent: 20, Descent: 7}, []font.GlyphInfo{
+	faceB := spanFace(FontMetrics{Ascent: 20, Descent: 7}, []testGlyphInfo{
 		{Rune: 'B', Width: 2, Height: 3, AdvanceX: 1, BearingX: -2},
 		{Rune: 'C', BitmapOffset: 3, Width: 1, Height: 2, AdvanceX: -2, BearingX: 1, BearingY: -1},
 	}, strings.Repeat("\x00", 5))
@@ -42,7 +41,7 @@ func TestMeasureSpansAcrossFaces(t *testing.T) {
 }
 
 func TestMeasureSpansWhitespaceOnly(t *testing.T) {
-	face := spanFace(font.Metrics{}, []font.GlyphInfo{{Rune: ' ', AdvanceX: 3}}, "")
+	face := spanFace(FontMetrics{}, []testGlyphInfo{{Rune: ' ', AdvanceX: 3}}, "")
 	got, err := MeasureSpans([]Span{{Font: face, Value: "  "}, {Font: face, Value: ""}})
 	if err != nil || got.Advance != 6 || got.HasInk || got.Bounds != (Bounds{}) {
 		t.Fatalf("measurement=%+v err=%v", got, err)
@@ -61,7 +60,7 @@ func TestStyleZeroValueAndCopyPreserveBold(t *testing.T) {
 }
 
 func TestBoldSpanMeasurementAndDrawing(t *testing.T) {
-	face := spanFace(font.Metrics{}, []font.GlyphInfo{
+	face := spanFace(FontMetrics{}, []testGlyphInfo{
 		{Rune: 'a', Width: 3, Height: 1, AdvanceX: 3},
 		{Rune: 'b', BitmapOffset: 1, Width: 3, Height: 1, AdvanceX: 3},
 	}, "\x80\x80")
@@ -96,7 +95,7 @@ func TestBoldSpanMeasurementAndDrawing(t *testing.T) {
 }
 
 func TestBoldFinalGlyphInkFitsMeasurement(t *testing.T) {
-	face := spanFace(font.Metrics{}, []font.GlyphInfo{{Rune: 'x', Width: 2, Height: 1, AdvanceX: 2}}, "\x80")
+	face := spanFace(FontMetrics{}, []testGlyphInfo{{Rune: 'x', Width: 2, Height: 1, AdvanceX: 2}}, "\x80")
 	measurement, err := MeasureSpans([]Span{{Font: face, Value: "x", Bold: true}})
 	if err != nil {
 		t.Fatal(err)
@@ -114,7 +113,7 @@ func TestBoldFinalGlyphInkFitsMeasurement(t *testing.T) {
 }
 
 func TestBoldGlyphIsClippedByViewportBackend(t *testing.T) {
-	face := spanFace(font.Metrics{}, []font.GlyphInfo{{Rune: 'x', Width: 2, Height: 1, AdvanceX: 2}}, "\x80")
+	face := spanFace(FontMetrics{}, []testGlyphInfo{{Rune: 'x', Width: 2, Height: 1, AdvanceX: 2}}, "\x80")
 	physical := &fakeBackend{}
 	viewport, err := display.NewViewport(display.Rect{X: 10, Y: 20, Width: 2, Height: 1})
 	if err != nil {
@@ -136,8 +135,8 @@ func TestBoldGlyphIsClippedByViewportBackend(t *testing.T) {
 }
 
 func TestMeasureSpansPartialErrors(t *testing.T) {
-	first := spanFace(font.Metrics{}, []font.GlyphInfo{{Rune: 'a', AdvanceX: 3}}, "")
-	second := spanFace(font.Metrics{}, []font.GlyphInfo{{Rune: 'b', AdvanceX: 2}}, "")
+	first := spanFace(FontMetrics{}, []testGlyphInfo{{Rune: 'a', AdvanceX: 3}}, "")
+	second := spanFace(FontMetrics{}, []testGlyphInfo{{Rune: 'b', AdvanceX: 2}}, "")
 	tests := []struct {
 		name  string
 		spans []Span
@@ -147,7 +146,7 @@ func TestMeasureSpansPartialErrors(t *testing.T) {
 		{"nil face", []Span{{Font: first, Value: "a"}, {Value: ""}}, 3, "span 1"},
 		{"missing glyph", []Span{{Font: first, Value: "a"}, {Font: second, Value: "bz"}}, 5, "U+007A"},
 		{"invalid UTF-8", []Span{{Font: first, Value: "a"}, {Font: second, Value: string([]byte{0xff})}}, 3, "span 1"},
-		{"span boundary advance overflow", []Span{{Font: spanFace(font.Metrics{}, []font.GlyphInfo{{Rune: 'x', AdvanceX: math.MaxInt16}}, ""), Value: "x"}, {Font: spanFace(font.Metrics{}, []font.GlyphInfo{{Rune: 'y', AdvanceX: 1}}, ""), Value: "y"}}, math.MaxInt16, "U+0079"},
+		{"span boundary advance overflow", []Span{{Font: spanFace(FontMetrics{}, []testGlyphInfo{{Rune: 'x', AdvanceX: math.MaxInt16}}, ""), Value: "x"}, {Font: spanFace(FontMetrics{}, []testGlyphInfo{{Rune: 'y', AdvanceX: 1}}, ""), Value: "y"}}, math.MaxInt16, "U+0079"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -174,8 +173,8 @@ func TestDrawSpansEmpty(t *testing.T) {
 }
 
 func TestDrawSpansSwitchesFacesAndColorsAndReusesScratch(t *testing.T) {
-	faceA := spanFace(font.Metrics{}, []font.GlyphInfo{{Rune: 'a', Width: 2, Height: 1, AdvanceX: 3, BearingY: 1}}, "\x80")
-	faceB := spanFace(font.Metrics{}, []font.GlyphInfo{{Rune: 'b', Width: 2, Height: 1, AdvanceX: 4, BearingX: 1, BearingY: -1}}, "\x80")
+	faceA := spanFace(FontMetrics{}, []testGlyphInfo{{Rune: 'a', Width: 2, Height: 1, AdvanceX: 3, BearingY: 1}}, "\x80")
+	faceB := spanFace(FontMetrics{}, []testGlyphInfo{{Rune: 'b', Width: 2, Height: 1, AdvanceX: 4, BearingX: 1, BearingY: -1}}, "\x80")
 	spans := []Span{
 		{Font: faceA, Value: "a", Foreground: 0x1234, Background: 0xabcd},
 		{Font: faceB, Value: "b", Foreground: 0x5678, Background: 0x9abc},
@@ -205,8 +204,8 @@ func TestDrawSpansSwitchesFacesAndColorsAndReusesScratch(t *testing.T) {
 }
 
 func TestDrawSpansWhitespaceAndPartialErrors(t *testing.T) {
-	space := spanFace(font.Metrics{}, []font.GlyphInfo{{Rune: ' ', AdvanceX: 3}}, "")
-	drawn := spanFace(font.Metrics{}, []font.GlyphInfo{{Rune: 'a', Width: 1, Height: 1, AdvanceX: 2}}, "\x80")
+	space := spanFace(FontMetrics{}, []testGlyphInfo{{Rune: ' ', AdvanceX: 3}}, "")
+	drawn := spanFace(FontMetrics{}, []testGlyphInfo{{Rune: 'a', Width: 1, Height: 1, AdvanceX: 2}}, "\x80")
 	backend := &fakeBackend{}
 	pen, err := DrawSpans(backend, []Span{{Font: space, Value: " "}, {Font: drawn, Value: "a"}}, 5, 0, make([]byte, 2))
 	if err != nil || pen != 10 || len(backend.rects) != 1 || backend.rects[0].X != 8 {
@@ -237,8 +236,8 @@ func TestDrawSpansOverflow(t *testing.T) {
 		spans []Span
 		pen   int16
 	}{
-		{"coordinate", []Span{{Font: spanFace(font.Metrics{}, []font.GlyphInfo{{Rune: 'a', Width: 1, Height: 1, BearingX: 1}}, "\x80"), Value: "a"}}, math.MaxInt16},
-		{"advance", []Span{{Font: spanFace(font.Metrics{}, []font.GlyphInfo{{Rune: 'a', AdvanceX: 1}}, ""), Value: "a"}}, math.MaxInt16},
+		{"coordinate", []Span{{Font: spanFace(FontMetrics{}, []testGlyphInfo{{Rune: 'a', Width: 1, Height: 1, BearingX: 1}}, "\x80"), Value: "a"}}, math.MaxInt16},
+		{"advance", []Span{{Font: spanFace(FontMetrics{}, []testGlyphInfo{{Rune: 'a', AdvanceX: 1}}, ""), Value: "a"}}, math.MaxInt16},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -287,26 +286,6 @@ func TestSingleSpanAPIsAgree(t *testing.T) {
 	if unionRects(stringBackend.rects) != unionRects(spanBackend.rects) {
 		t.Fatalf("string rects=%v span rects=%v", stringBackend.rects, spanBackend.rects)
 	}
-}
-
-type fixtureFont struct{ source *font.Font }
-
-func (adapter fixtureFont) Lookup(r rune) (Glyph, bool) {
-	glyph, ok := adapter.source.Lookup(r)
-	if !ok {
-		return Glyph{}, false
-	}
-	return Glyph{Width: glyph.Width, Height: glyph.Height, AdvanceX: glyph.AdvanceX, BearingX: glyph.BearingX, BearingY: glyph.BearingY, Bitmap: glyph.Bitmap}, true
-}
-
-func (adapter fixtureFont) Metrics() FontMetrics {
-	metrics := adapter.source.Metrics()
-	return FontMetrics{Ascent: metrics.Ascent, Descent: metrics.Descent, LineGap: metrics.LineGap}
-}
-
-func spanFace(metrics font.Metrics, glyphs []font.GlyphInfo, bitmap string) Font {
-	face := font.New(metrics, glyphs, bitmap)
-	return fixtureFont{source: &face}
 }
 
 func unionRects(rects []display.Rect) Bounds {

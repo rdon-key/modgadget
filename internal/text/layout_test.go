@@ -6,8 +6,6 @@ import (
 	"reflect"
 	"strings"
 	"testing"
-
-	"github.com/rdon-key/modgadget-fonts/font"
 )
 
 func TestTextLayoutZeroAndNilReceiver(t *testing.T) {
@@ -40,7 +38,7 @@ func TestNewTextLayoutEmptyInputs(t *testing.T) {
 }
 
 func TestTextLayoutMatchesExistingPipeline(t *testing.T) {
-	face := spanFace(font.Metrics{Ascent: 2, Descent: 1}, []font.GlyphInfo{{Rune: 'a', Width: 1, Height: 1, AdvanceX: 2, BearingY: 1}}, "\x80")
+	face := spanFace(FontMetrics{Ascent: 2, Descent: 1}, []testGlyphInfo{{Rune: 'a', Width: 1, Height: 1, AdvanceX: 2, BearingY: 1}}, "\x80")
 	spans := []Span{{Font: face, Value: "a\na\n", Foreground: 0x1234, Background: 0xabcd}}
 	lines, err := LinesFromSpans(spans)
 	if err != nil {
@@ -57,8 +55,8 @@ func TestTextLayoutMatchesExistingPipeline(t *testing.T) {
 }
 
 func TestTextLayoutDrawsRepeatedlyWithSavedStyles(t *testing.T) {
-	face := spanFace(font.Metrics{Ascent: 2, Descent: 1}, []font.GlyphInfo{{Rune: 'a', Width: 2, Height: 1, AdvanceX: 3, BearingY: 1}}, "\x80")
-	otherFace := spanFace(font.Metrics{Ascent: 9}, nil, "")
+	face := spanFace(FontMetrics{Ascent: 2, Descent: 1}, []testGlyphInfo{{Rune: 'a', Width: 2, Height: 1, AdvanceX: 3, BearingY: 1}}, "\x80")
+	otherFace := spanFace(FontMetrics{Ascent: 9}, nil, "")
 	spans := []Span{
 		{Font: face, Value: "a", Foreground: 0x1234, Background: 0xabcd},
 		{Font: face, Value: "a\na", Foreground: 0x5678, Background: 0x9abc},
@@ -105,10 +103,10 @@ func TestTextLayoutDrawsRepeatedlyWithSavedStyles(t *testing.T) {
 }
 
 func TestNewTextLayoutErrorsReturnZeroLayout(t *testing.T) {
-	valid := spanFace(font.Metrics{}, []font.GlyphInfo{{Rune: 'a', AdvanceX: 1}}, "")
-	lineOverflowA := spanFace(font.Metrics{Ascent: math.MaxInt16}, nil, "")
-	lineOverflowB := spanFace(font.Metrics{Descent: 1}, nil, "")
-	boundsOverflow := spanFace(font.Metrics{}, []font.GlyphInfo{{Rune: 'a', Width: math.MaxInt16, Height: 1, BearingX: 1}}, strings.Repeat("\x00", 4096))
+	valid := spanFace(FontMetrics{}, []testGlyphInfo{{Rune: 'a', AdvanceX: 1}}, "")
+	lineOverflowA := spanFace(FontMetrics{Ascent: math.MaxInt16}, nil, "")
+	lineOverflowB := spanFace(FontMetrics{Descent: 1}, nil, "")
+	boundsOverflow := spanFace(FontMetrics{}, []testGlyphInfo{{Rune: 'a', Width: math.MaxInt16, Height: 1, BearingX: 1}}, strings.Repeat("\x00", 4096))
 	tests := []struct {
 		name  string
 		spans []Span
@@ -131,8 +129,8 @@ func TestNewTextLayoutErrorsReturnZeroLayout(t *testing.T) {
 }
 
 func TestTextLayoutDrawPreservesDrawLinesPartialError(t *testing.T) {
-	empty := spanFace(font.Metrics{Ascent: 3}, nil, "")
-	drawn := spanFace(font.Metrics{Ascent: 2}, []font.GlyphInfo{{Rune: 'a', Width: 1, Height: 1, AdvanceX: 1}}, "\x80")
+	empty := spanFace(FontMetrics{Ascent: 3}, nil, "")
+	drawn := spanFace(FontMetrics{Ascent: 2}, []testGlyphInfo{{Rune: 'a', Width: 1, Height: 1, AdvanceX: 1}}, "\x80")
 	layout, err := NewTextLayout([]Span{{Font: empty, Value: "\n"}, {Font: drawn, Value: "a"}})
 	if err != nil {
 		t.Fatal(err)
