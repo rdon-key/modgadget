@@ -3,13 +3,12 @@
 package main
 
 import (
-	"machine"
 	"runtime"
 	"time"
 
 	"github.com/rdon-key/modgadget"
+	board "github.com/rdon-key/modgadget/examples/internal/cardputeradv"
 	audio "github.com/rdon-key/modgadget/internal/audio/cardputeradv"
-	keyboarddriver "github.com/rdon-key/modgadget/internal/keyboard/cardputeradv"
 )
 
 const (
@@ -57,25 +56,17 @@ func (controller *debugVolumeController) ToggleMute() {
 }
 
 func main() {
-	player := audio.New()
-	if err := player.Configure(); err != nil {
+	player, err := board.ConfigureAudio()
+	if err != nil {
 		panic(err)
 	}
 	println("audio: configured")
 	println("audio: volume", player.Volume().String())
 	println("audio: Fn+= up, Fn+- down, Fn+M mute")
 
-	// Audio Configure initially owns the shared I2C bus at 100 kHz. Configure
-	// it for the TCA8418 last; ES8311 playback does not perform I2C transfers.
-	if err := machine.I2C0.Configure(machine.I2CConfig{
-		Frequency: 400_000,
-		SDA:       machine.GPIO8,
-		SCL:       machine.GPIO9,
-	}); err != nil {
-		panic(err)
-	}
-	keyboard := keyboarddriver.New(machine.I2C0)
-	if err := keyboard.Configure(); err != nil {
+	// Configure the keyboard last because audio and keyboard share I2C0.
+	keyboard, err := board.ConfigureKeyboard()
+	if err != nil {
 		panic(err)
 	}
 	volume := &debugVolumeController{player: player}

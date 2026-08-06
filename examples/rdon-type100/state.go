@@ -5,12 +5,13 @@ import (
 	"time"
 
 	"github.com/rdon-key/modgadget"
+	board "github.com/rdon-key/modgadget/examples/internal/cardputeradv"
 	audio "github.com/rdon-key/modgadget/internal/audio/cardputeradv"
 )
 
 const (
-	displayWidth      int16 = 240
-	displayHeight     int16 = 135
+	displayWidth      int16 = board.DisplayWidth
+	displayHeight     int16 = board.DisplayHeight
 	titleText               = "Rdon Type 100"
 	titleMarkup             = "<style=title>Rdon <b>Type 100</b></style>"
 	titleBoldInkExtra int16 = 1

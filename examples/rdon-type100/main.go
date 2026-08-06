@@ -3,15 +3,12 @@
 package main
 
 import (
-	"machine"
 	"time"
 
 	"github.com/rdon-key/modgadget"
-	audio "github.com/rdon-key/modgadget/internal/audio/cardputeradv"
+	board "github.com/rdon-key/modgadget/examples/internal/cardputeradv"
 	"github.com/rdon-key/modgadget/internal/fontdata/mgf/efont16"
 	"github.com/rdon-key/modgadget/internal/fontdata/mgf/efont24"
-	keyboarddriver "github.com/rdon-key/modgadget/internal/keyboard/cardputeradv"
-	"github.com/rdon-key/modgadget/internal/st7789"
 )
 
 const (
@@ -42,12 +39,19 @@ type resultViews struct {
 
 func main() {
 	time.Sleep(3 * time.Second)
-	panel := configureDisplay()
-	player := audio.New()
-	if err := player.Configure(); err != nil {
+	panel, err := board.ConfigureDisplay()
+	if err != nil {
 		panic(err)
 	}
-	keyboard := configureKeyboard()
+	player, err := board.ConfigureAudio()
+	if err != nil {
+		panic(err)
+	}
+	// Configure the keyboard last because audio and keyboard share I2C0.
+	keyboard, err := board.ConfigureKeyboard()
+	if err != nil {
+		panic(err)
+	}
 
 	menuFont := modgadget.NewMGFFont(efont16.Font)
 	largeFont := modgadget.NewMGFFont(efont24.Font)
@@ -214,30 +218,6 @@ func mustTextAdvance(font modgadget.Font, value string) int16 {
 		panic(err)
 	}
 	return width
-}
-
-func configureDisplay() modgadget.Display {
-	if err := machine.SPI1.Configure(machine.SPIConfig{Frequency: 40_000_000, Mode: 0, SCK: machine.DISPLAY_SCK, SDO: machine.DISPLAY_MOSI, SDI: machine.NoPin}); err != nil {
-		panic(err)
-	}
-	machine.DISPLAY_BL.Configure(machine.PinConfig{Mode: machine.PinOutput})
-	machine.DISPLAY_BL.High()
-	panel := st7789.New(machine.SPI1, machine.DISPLAY_CS, machine.DISPLAY_DC, machine.DISPLAY_RST)
-	if err := panel.Configure(st7789.Config{Width: 135, Height: 240, Rotation: st7789.Rotation90, RowOffset: 40, ColumnOffset: 52, Invert: true}); err != nil {
-		panic(err)
-	}
-	return panel
-}
-
-func configureKeyboard() *keyboarddriver.Keyboard {
-	if err := machine.I2C0.Configure(machine.I2CConfig{Frequency: 400_000, SDA: machine.GPIO8, SCL: machine.GPIO9}); err != nil {
-		panic(err)
-	}
-	keyboard := keyboarddriver.New(machine.I2C0)
-	if err := keyboard.Configure(); err != nil {
-		panic(err)
-	}
-	return keyboard
 }
 
 func newMenuViews(gadget *modgadget.Gadget, titleWidth int16) menuViews {

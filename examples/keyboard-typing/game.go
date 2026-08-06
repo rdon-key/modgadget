@@ -2,48 +2,29 @@ package main
 
 import "github.com/rdon-key/modgadget"
 
-const target = "TinyGo Makes Small Devices Fun!"
+const maximumTypedRunes = 64
 
-const targetLineBreak = len("TinyGo Makes ")
-
-type game struct {
-	position int
-	misses   int
+type typingState struct {
+	runes [maximumTypedRunes]rune
+	count int
 }
 
-func (game *game) Reset() { game.position, game.misses = 0, 0 }
-
-func (game *game) HandleKey(event modgadget.KeyEvent) bool {
+func (state *typingState) HandleKey(event modgadget.KeyEvent) bool {
 	if event.Action != modgadget.KeyDown {
 		return false
 	}
-	switch event.Code {
-	case modgadget.KeyEnter:
-		game.Reset()
-		return true
-	case modgadget.KeyBackspace:
-		if game.position > 0 {
-			game.position--
+	if event.Code == modgadget.KeyBackspace {
+		if state.count > 0 {
+			state.count--
 		}
 		return true
 	}
-	if event.Rune == 0 || game.Complete() {
+	if event.Rune < ' ' || event.Rune == 0 || state.count == len(state.runes) {
 		return false
 	}
-	if event.Rune == rune(target[game.position]) {
-		game.position++
-	} else {
-		game.misses++
-	}
+	state.runes[state.count] = event.Rune
+	state.count++
 	return true
 }
 
-func (game *game) Complete() bool { return game.position == len(target) }
-
-func (game *game) typedMarkup() string {
-	typed := target[:game.position]
-	if game.position > targetLineBreak {
-		return typed[:targetLineBreak] + "<br>" + typed[targetLineBreak:]
-	}
-	return typed
-}
+func (state *typingState) Text() string { return string(state.runes[:state.count]) }
