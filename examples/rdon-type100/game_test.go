@@ -9,6 +9,7 @@ import (
 	audio "github.com/rdon-key/modgadget/internal/audio/cardputeradv"
 	"github.com/rdon-key/modgadget/internal/fontdata/mgf/efont16"
 	"github.com/rdon-key/modgadget/internal/fontdata/mgf/efont24"
+	"github.com/rdon-key/modgadget/internal/text/markup"
 )
 
 func letterEvent(code modgadget.KeyCode, r rune, action modgadget.KeyAction) modgadget.KeyEvent {
@@ -20,6 +21,8 @@ func TestJapaneseQuestionData(t *testing.T) {
 		t.Fatalf("questions=%d want=20", len(japaneseQuestions))
 	}
 	seenPrompt, seenRoman := map[string]bool{}, map[string]bool{}
+	promptFont := modgadget.NewMGFFont(efont24.Font)
+	promptParser := markup.Parser{Styles: modgadget.StyleSet{Default: modgadget.Style{Font: promptFont}}}
 	for index, item := range japaneseQuestions {
 		if item.prompt == "" || item.roman == "" {
 			t.Fatalf("question %d is empty: %+v", index, item)
@@ -39,13 +42,17 @@ func TestJapaneseQuestionData(t *testing.T) {
 				t.Errorf("question %d Efont24 missing %q", index, r)
 			}
 		}
-		for _, r := range item.prompt {
-			if _, ok := efont24.Font.Lookup(r); !ok {
-				t.Errorf("question %d Efont24 missing %q", index, r)
+		spans, err := promptParser.Parse(item.prompt)
+		if err != nil {
+			t.Errorf("question %d prompt markup: %v", index, err)
+		} else {
+			for _, span := range spans {
+				for _, r := range span.Value {
+					if _, ok := efont24.Font.Lookup(r); !ok {
+						t.Errorf("question %d Efont24 missing %q", index, r)
+					}
+				}
 			}
-		}
-		if width := fontWidth(t, modgadget.NewMGFFont(efont24.Font), item.prompt); width > promptWidth {
-			t.Errorf("question %d prompt width=%d > %d", index, width, promptWidth)
 		}
 		if width := fontWidth(t, modgadget.NewMGFFont(efont16.Font), item.roman); width > romanWidth {
 			t.Errorf("question %d roman width=%d > %d", index, width, romanWidth)

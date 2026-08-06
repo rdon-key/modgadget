@@ -47,7 +47,7 @@ func main() {
 	if err := title.SetText("<style=title>Keyboard input</style>"); err != nil {
 		panic(err)
 	}
-	if err := help.SetText("Backspace: erase  Fn+M: mute"); err != nil {
+	if err := help.SetText("Backspace: erase "); err != nil {
 		panic(err)
 	}
 
@@ -56,7 +56,7 @@ func main() {
 		if !state.HandleKey(event) {
 			return false
 		}
-		if err := typed.SetText(state.Text()); err != nil {
+		if err := typed.SetText(escapeMarkup(state.Text())); err != nil {
 			panic(err)
 		}
 		return true

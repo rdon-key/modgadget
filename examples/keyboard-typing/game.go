@@ -1,6 +1,10 @@
 package main
 
-import "github.com/rdon-key/modgadget"
+import (
+	"strings"
+
+	"github.com/rdon-key/modgadget"
+)
 
 const maximumTypedRunes = 64
 
@@ -28,3 +32,5 @@ func (state *typingState) HandleKey(event modgadget.KeyEvent) bool {
 }
 
 func (state *typingState) Text() string { return string(state.runes[:state.count]) }
+
+func escapeMarkup(value string) string { return strings.ReplaceAll(value, "<", "<<") }

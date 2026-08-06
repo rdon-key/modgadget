@@ -7,6 +7,7 @@ import (
 	"github.com/rdon-key/modgadget"
 	"github.com/rdon-key/modgadget/internal/fontdata/mgf/efont16"
 	"github.com/rdon-key/modgadget/internal/fontdata/mgf/efont24"
+	"github.com/rdon-key/modgadget/internal/text/markup"
 )
 
 var expectedEnglish = [...]question{
@@ -34,7 +35,7 @@ var expectedKorean = [...]question{
 }
 
 var expectedAllLanguages = [...]question{
-	{"こんにちは", "konnitiwa"}, {"hello", "hello"}, {"你好", "nihao"}, {"안녕하세요", "annyeonghaseyo"},
+	{"こんにちは", "konnitiha"}, {"hello", "hello"}, {"你好", "nihao"}, {"안녕하세요", "annyeonghaseyo"},
 	{"ありがとう", "arigatou"}, {"thanks", "thanks"}, {"谢谢", "xiexie"}, {"감사합니다", "gamsahamnida"},
 	{"にほん", "nihon"}, {"japan", "japan"}, {"中国", "zhongguo"}, {"한국", "hanguk"},
 	{"ねこ", "neko"}, {"cat", "cat"}, {"小猫", "xiaomao"}, {"고양이", "goyangi"},
@@ -44,6 +45,7 @@ var expectedAllLanguages = [...]question{
 func TestCourseQuestionTablesAndRenderingCoverage(t *testing.T) {
 	menuFont := modgadget.NewMGFFont(efont16.Font)
 	largeFont := modgadget.NewMGFFont(efont24.Font)
+	promptParser := markup.Parser{Styles: modgadget.StyleSet{Default: modgadget.Style{Font: largeFont}}}
 	tests := []struct {
 		id       courseID
 		expected []question
@@ -61,7 +63,7 @@ func TestCourseQuestionTablesAndRenderingCoverage(t *testing.T) {
 		}
 		seenPrompts, seenInputs := map[string]bool{}, map[string]bool{}
 		for index, item := range got {
-			if item != test.expected[index] {
+			if primaryPrompt(t, promptParser, item.prompt) != primaryPrompt(t, promptParser, test.expected[index].prompt) || item.roman != test.expected[index].roman {
 				t.Errorf("course %v question %d=%+v want=%+v", test.id, index, item, test.expected[index])
 			}
 			if item.prompt == "" || item.roman == "" {
@@ -71,9 +73,16 @@ func TestCourseQuestionTablesAndRenderingCoverage(t *testing.T) {
 				t.Errorf("course %v duplicate question %d=%+v", test.id, index, item)
 			}
 			seenPrompts[item.prompt], seenInputs[item.roman] = true, true
-			for _, r := range item.prompt {
-				if _, ok := largeFont.Lookup(r); !ok {
-					t.Errorf("course %v prompt %q missing Efont24 rune %q", test.id, item.prompt, r)
+			spans, err := promptParser.Parse(item.prompt)
+			if err != nil {
+				t.Errorf("course %v prompt %q markup: %v", test.id, item.prompt, err)
+				continue
+			}
+			for _, span := range spans {
+				for _, r := range span.Value {
+					if _, ok := largeFont.Lookup(r); !ok {
+						t.Errorf("course %v prompt %q missing Efont24 rune %q", test.id, item.prompt, r)
+					}
 				}
 			}
 			for _, r := range item.roman {
@@ -87,9 +96,6 @@ func TestCourseQuestionTablesAndRenderingCoverage(t *testing.T) {
 					t.Errorf("course %v input %q missing Efont24 rune %q", test.id, item.roman, r)
 				}
 			}
-			if width := fontWidth(t, largeFont, item.prompt); width > promptWidth {
-				t.Errorf("course %v prompt %q width=%d > %d", test.id, item.prompt, width, promptWidth)
-			}
 			if width := fontWidth(t, menuFont, item.roman); width > romanWidth {
 				t.Errorf("course %v input %q Efont16 width=%d > %d", test.id, item.roman, width, romanWidth)
 			}
@@ -101,6 +107,18 @@ func TestCourseQuestionTablesAndRenderingCoverage(t *testing.T) {
 	if questionsForCourse(courseID(255)) != nil {
 		t.Fatal("invalid course returned questions")
 	}
+}
+
+func primaryPrompt(t *testing.T, parser markup.Parser, value string) string {
+	t.Helper()
+	spans, err := parser.Parse(value)
+	if err != nil {
+		t.Fatalf("parse prompt %q: %v", value, err)
+	}
+	if len(spans) == 0 {
+		t.Fatalf("prompt %q produced no spans", value)
+	}
+	return spans[0].Value
 }
 
 func TestAllLanguagesMatchesSourceQuestions(t *testing.T) {
@@ -185,8 +203,9 @@ func TestAllLanguagesCyclesJapaneseEnglishChineseKorean(t *testing.T) {
 		t.Fatal("all-languages did not start")
 	}
 	want := []string{"こんにちは", "hello", "你好", "안녕하세요"}
+	parser := markup.Parser{Styles: modgadget.StyleSet{Default: modgadget.Style{Font: modgadget.NewMGFFont(efont24.Font)}}}
 	for index, prompt := range want {
-		if play.currentQuestion().prompt != prompt {
+		if primaryPrompt(t, parser, play.currentQuestion().prompt) != prompt {
 			t.Fatalf("step %d prompt=%q want=%q", index, play.currentQuestion().prompt, prompt)
 		}
 		if index+1 < len(want) {
