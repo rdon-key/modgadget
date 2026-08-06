@@ -5,8 +5,8 @@ import (
 	"time"
 
 	"github.com/rdon-key/modgadget"
-	board "github.com/rdon-key/modgadget/examples/internal/cardputeradv"
-	audio "github.com/rdon-key/modgadget/internal/audio/cardputeradv"
+	audio "github.com/rdon-key/modgadget/audio/cardputeradv"
+	board "github.com/rdon-key/modgadget/device/cardputeradv"
 )
 
 const (

@@ -6,9 +6,9 @@ import (
 	"testing"
 
 	"github.com/rdon-key/modgadget"
+	audio "github.com/rdon-key/modgadget/audio/cardputeradv"
 	"github.com/rdon-key/modgadget/font/efont16"
 	"github.com/rdon-key/modgadget/font/efont24"
-	audio "github.com/rdon-key/modgadget/internal/audio/cardputeradv"
 )
 
 func keyDown(code modgadget.KeyCode) modgadget.KeyEvent {

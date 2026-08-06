@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/rdon-key/modgadget"
-	board "github.com/rdon-key/modgadget/examples/internal/cardputeradv"
+	board "github.com/rdon-key/modgadget/device/cardputeradv"
 	"github.com/rdon-key/modgadget/font/efont16"
 )
 
