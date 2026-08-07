@@ -8,7 +8,9 @@ It provides text layout, multilingual bitmap-font support, viewports, scrolling,
 
 ModGadget is currently developed primarily for the M5Stack Cardputer ADV and the TinyGo `m5stamp-s3a` target.
 
-![ModGadget multilingual UI running on the M5Stack Cardputer ADV](images/modgadget-multilingual-cardputer-adv.jpg)
+![ModGadget multilingual UI running on the M5Stack Cardputer ADV](https://github.com/user-attachments/assets/a22a4dc2-b42c-4f4a-85b7-5020bc5e9eb9)
+
+https://github.com/user-attachments/assets/ee2f05e0-af8b-4a85-a7cd-2824e66a5d73
 
 ## What ModGadget provides
 
