@@ -171,8 +171,9 @@ modifiers are cleared because a release may have been lost. No synthetic KeyUp
 is generated. The counter increases by one because the controller cannot report
 the exact number lost. Polling I2C errors are available from `Err`.
 
-`Configure` also clears the local queue, pressed state, saved Codes, modifiers,
-dropped counter, and previous polling error before draining the hardware FIFO.
+The low-level adapter configuration also clears the local queue, pressed
+state, saved Codes, modifiers, dropped counter, and previous polling error
+before draining the hardware FIFO.
 
 The TCA8418 CFG value enables key-event interrupts (bit 0) and overflow
 interrupts (bit 3). Bit 5 is not an interrupt mask: it selects whether new
@@ -242,10 +243,10 @@ See
 in the practical examples repository. It handles printable `KeyDown` runes and
 Backspace, escapes markup in user input, and updates a text viewport.
 
-## Current limitations and future separation
+## Current limitations and future direction
 
-- Low-level Cardputer adapter and display driver implementations are internal;
-  external applications use `device/cardputeradv`.
+- The low-level Cardputer keyboard implementation is internal; external
+  applications use `device/cardputeradv`.
 - There is no automatic repeat, configurable keymap, focus, bubbling, capture,
   shortcut manager, Text mode, composition, or IME.
 - The adapter relies on TCA8418 edge handling instead of adding a debounce timer.
@@ -261,4 +262,4 @@ KeyEvent
 ```
 
 The future concepts above are not current APIs. An IME committing multiple
-characters should use a separate event, not extend `KeyEvent.Rune`.
+characters should use a separate event rather than extending `KeyEvent.Rune`.
