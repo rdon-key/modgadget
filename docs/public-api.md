@@ -11,10 +11,9 @@ It does not represent server-side application infrastructure.
 
 ## First `main.go`
 
-The following repository-local program is intended to run inside the
-ModGadget repository. It uses the bundled public font package together with
-the repository's internal ST7789 driver; external modules cannot import that
-driver and must provide their own Display implementation.
+The following program can be used from an external Go module. It uses the
+public Cardputer ADV device package together with a font distributed by
+[ModGadget Fonts](https://github.com/rdon-key/modgadget-fonts).
 
 ```go
 //go:build tinygo
@@ -22,44 +21,18 @@ driver and must provide their own Display implementation.
 package main
 
 import (
-	"machine"
 	"time"
 
 	"github.com/rdon-key/modgadget"
-	"github.com/rdon-key/modgadget/font/efont24"
-	"github.com/rdon-key/modgadget/internal/st7789"
+	"github.com/rdon-key/modgadget-fonts/efont24"
+	board "github.com/rdon-key/modgadget/device/cardputeradv"
 )
 
 func main() {
 	time.Sleep(3 * time.Second)
 
-	if err := machine.SPI1.Configure(machine.SPIConfig{
-		Frequency: 40_000_000,
-		Mode:      0,
-		SCK:       machine.DISPLAY_SCK,
-		SDO:       machine.DISPLAY_MOSI,
-		SDI:       machine.NoPin,
-	}); err != nil {
-		panic(err)
-	}
-
-	machine.DISPLAY_BL.Configure(machine.PinConfig{Mode: machine.PinOutput})
-	machine.DISPLAY_BL.High()
-
-	panel := st7789.New(
-		machine.SPI1,
-		machine.DISPLAY_CS,
-		machine.DISPLAY_DC,
-		machine.DISPLAY_RST,
-	)
-	if err := panel.Configure(st7789.Config{
-		Width:        135,
-		Height:       240,
-		Rotation:     st7789.Rotation90,
-		RowOffset:    40,
-		ColumnOffset: 52,
-		Invert:       true,
-	}); err != nil {
+	panel, err := board.ConfigureDisplay()
+	if err != nil {
 		panic(err)
 	}
 
@@ -106,19 +79,19 @@ func main() {
 
 ## How the first program works
 
-1. **Configure SPI and the backlight.** The board owns these operations;
-   ModGadget does not configure hardware automatically.
-2. **Create the ST7789 display driver.** The configured panel satisfies
+1. **Configure the display.** The public Cardputer ADV device package configures
+   the board-specific ST7789 display and returns a value satisfying
    `modgadget.Display`.
-3. **Prepare a Font.** `efont24.Font` is an opaque bundled Font handle.
-4. **Define Styles.** `Default` supplies the normal font and colors, while
+2. **Prepare a Font.** `efont24.Font` is a ready-to-use `modgadget.Font`
+   distributed by ModGadget Fonts.
+3. **Define Styles.** `Default` supplies the normal font and colors, while
    `message` is selected by markup.
-5. **Create the Gadget.** `New` stores the Display and StyleSet.
-6. **Clear the screen.** `Gadget.Clear` explicitly fills the whole Display with
+4. **Create the Gadget.** `New` stores the Display and StyleSet.
+5. **Clear the screen.** `Gadget.Clear` explicitly fills the whole Display with
    the default background.
-7. **Place a Viewport.** `Bounds` uses physical Display coordinates.
-8. **Set Text.** `SetText` parses markup and prepares the text layout.
-9. **Render and keep the program running.** `Render` draws dirty Viewports, and
+6. **Place a Viewport.** `Bounds` uses physical Display coordinates.
+7. **Set Text.** `SetText` parses markup and prepares the text layout.
+8. **Render and keep the program running.** `Render` draws dirty Viewports, and
    the final wait loop keeps the embedded program alive without redrawing.
 
 ## Display
@@ -140,21 +113,27 @@ can target an LCD, a memory display, a framebuffer sink, or a virtual display
 in an emulator.
 
 Display is output-only. It does not include a keyboard, buttons, touch input,
-a pointer, audio, storage, or networking. Users can implement their own
-Display using the four methods above. The bundled ST7789 driver currently lives
-in `internal/st7789` and cannot be imported by an external module.
+a pointer, audio, storage, or networking.
+
+Applications can implement their own Display using the four methods above.
+For the M5Stack Cardputer ADV, the public
+`github.com/rdon-key/modgadget/device/cardputeradv` package provides
+board-specific display configuration through `ConfigureDisplay`.
 
 ## Preparing a Font
 
-Bundled fonts are public packages and only imported assets are linked:
+Ready-to-use generated fonts are distributed separately by
+[ModGadget Fonts](https://github.com/rdon-key/modgadget-fonts).
+
+Only packages imported by the application are linked. For example:
 
 ```go
-import "github.com/rdon-key/modgadget/font/efont24"
+import "github.com/rdon-key/modgadget-fonts/efont24"
 
 font := efont24.Font
 ```
 
-Representative embedded assets are:
+Available packages include:
 
 - Efont 16dot
 - Efont 24dot
@@ -162,6 +141,7 @@ Representative embedded assets are:
 - Spleen 8×16
 
 Applications can embed their own validated MGF asset without copying it:
+
 
 ```go
 //go:embed fonts/custom.mgf
@@ -558,16 +538,13 @@ Only identifiers currently exported by the root package are listed here.
 
 ## Current limitations
 
-- The ST7789 display driver is internal.
-- Embedded font assets are internal.
-- Types needed to implement a custom Font are not exported by the root package.
-- TinyGo target selection, SPI configuration, and pin setup belong to the
-  application.
-- There are no Widgets.
+- Types needed to implement a custom Font engine are not exported by the root
+  package.
+- There are no general UI Widgets.
 - Keyboard provides direct Key events only; there is no Text input or IME API.
 - There is no Touch or Pointer interface.
-- There is no focus, Widget event bubbling, or capture phase.
+- There is no focus or Widget event-propagation model.
 - There is no z-index or compositor.
-- There is no vertical automatic scroll.
+- There is no automatic vertical scroll.
 - Viewports cannot be resized or removed.
 - API compatibility is not guaranteed while the package is experimental.
