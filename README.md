@@ -8,11 +8,21 @@ See [Public API](docs/public-api.md) for the current high-level API.
 See [Keyboard API](docs/keyboard.md) for direct key-event input.
 With a volume controller, the standard Cardputer ADV keys are Fn+=, Fn+-, and Fn+M.
 
-Bundled opaque fonts are available from packages such as
-`github.com/rdon-key/modgadget/font/efont24`. Applications can load embedded
-MGF data with `OpenMGF`, inspect coverage with `Font.HasGlyph`, combine fonts
-with `NewFontStack`, and measure markup with `MeasureText`. Glyph bitmaps and
-custom Font engine implementations are intentionally not public APIs.
+Small, API-focused examples are kept in [`examples`](examples/). More practical
+examples that combine several ModGadget features are in
+[`modgadget-examples`](https://github.com/rdon-key/modgadget-examples). For a
+complete application, see
+[`rdon-type100`](https://github.com/rdon-key/rdon-type100).
+
+Generated fonts are distributed separately by
+[`modgadget-fonts`](https://github.com/rdon-key/modgadget-fonts). Applications
+can import packages such as `github.com/rdon-key/modgadget-fonts/efont16` and
+`github.com/rdon-key/modgadget-fonts/efont24`. ModGadget provides the public
+`Font` API together with font loading, measurement, layout, and drawing. It can
+load embedded MGF data with `OpenMGF`, inspect coverage with `Font.HasGlyph`,
+combine fonts with `NewFontStack`, and measure markup with `MeasureText`.
+Glyph bitmaps and custom Font engine implementations are intentionally not
+public APIs.
 
 It currently renders RGB565 graphics directly to an ST7789 without requiring a full framebuffer.
 
@@ -27,8 +37,6 @@ It currently renders RGB565 graphics directly to an ST7789 without requiring a f
 
 ## Planned
 
-- Clipping and viewports
-- Packed and CJK fonts
 - Widgets and dirty-region rendering
 - Hardware scrolling
 - Panel-specific color profiles

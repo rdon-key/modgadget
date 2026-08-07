@@ -13,9 +13,7 @@ EXAMPLES = (
     "hello-text",
     "multilingual-text",
     "text-ticker",
-    "keyboard-typing",
     "cardputer-adv-audio",
-    "rdon-type100",
 )
 
 

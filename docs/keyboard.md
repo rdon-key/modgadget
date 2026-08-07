@@ -141,22 +141,23 @@ for {
 
 ## Cardputer ADV adapter
 
-The repository adapter is `internal/keyboard/cardputeradv`. Repository examples
-can use it, but external modules cannot import it while it remains internal.
+External applications use the public
+`github.com/rdon-key/modgadget/device/cardputeradv` package. Its
+`ConfigureKeyboard` function initializes the keyboard and returns a value that
+can be passed to `modgadget.WithKeyboard`:
 
 ```go
-if err := machine.I2C0.Configure(machine.I2CConfig{
-	Frequency: 400_000,
-	SDA:       machine.GPIO8,
-	SCL:       machine.GPIO9,
-}); err != nil {
+keyboard, err := cardputeradv.ConfigureKeyboard()
+if err != nil {
 	panic(err)
 }
-keyboard := cardputeradv.New(machine.I2C0)
-if err := keyboard.Configure(); err != nil {
-	panic(err)
-}
+gadget := modgadget.New(display, modgadget.WithKeyboard(keyboard))
 ```
+
+The same public package provides `ConfigureDisplay` and `ConfigureAudio` for
+applications that also need the Cardputer ADV display or audio player. The
+low-level keyboard implementation remains in `internal/keyboard/cardputeradv`;
+external modules do not import that implementation directly.
 
 The adapter talks to the TCA8418 at I2C address `0x34`. The controller provides
 press/release edges through a ten-event FIFO. The adapter additionally tracks
@@ -234,17 +235,17 @@ bit, while modifier KeyUp is emitted after its bit is cleared. Non-modifier
 events contain the modifier state active at that event. Cardputer Opt maps to
 `ModMeta`; Control, Alt, or Meta makes a printable event's Rune zero.
 
-## Typing-game example
+## Typing example
 
-See [`examples/keyboard-typing/main.go`](../examples/keyboard-typing/main.go).
-It displays `TinyGo Makes Small Devices Fun!`, compares printable KeyDown runes,
-counts misses, accepts Backspace to move back, and uses Enter to restart. Capital
-letters and the exclamation mark exercise Aa/Shift. The target and typed text
-use the same explicit two-line break so neither is horizontally clipped.
+See
+[`keyboard-typing`](https://github.com/rdon-key/modgadget-examples/tree/main/keyboard-typing)
+in the practical examples repository. It handles printable `KeyDown` runes and
+Backspace, escapes markup in user input, and updates a text viewport.
 
 ## Current limitations and future separation
 
-- The Cardputer adapter and bundled display/font drivers are internal.
+- Low-level Cardputer adapter and display driver implementations are internal;
+  external applications use `device/cardputeradv`.
 - There is no automatic repeat, configurable keymap, focus, bubbling, capture,
   shortcut manager, Text mode, composition, or IME.
 - The adapter relies on TCA8418 edge handling instead of adding a debounce timer.
