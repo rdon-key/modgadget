@@ -10,6 +10,63 @@ It provides text layout, multilingual bitmap-font support, viewports, scrolling,
 
 ModGadget is currently developed primarily for the M5Stack Cardputer ADV and the TinyGo `m5stamp-s3a` target.
 
+## Quick Start
+
+This minimal Cardputer ADV application configures the display and renders one
+text Viewport:
+
+```go
+//go:build tinygo
+
+package main
+
+import (
+	"time"
+
+	"github.com/rdon-key/modgadget"
+	"github.com/rdon-key/modgadget-fonts/efont16"
+	board "github.com/rdon-key/modgadget/device/cardputeradv"
+)
+
+func main() {
+	time.Sleep(3 * time.Second)
+	panel, err := board.ConfigureDisplay()
+	if err != nil {
+		panic(err)
+	}
+	gadget := modgadget.New(panel, modgadget.WithStyles(modgadget.StyleSet{
+		Default: modgadget.Style{
+			Font:       efont16.Font,
+			Foreground: modgadget.ColorWhite,
+			Background: modgadget.ColorBlack,
+		},
+	}))
+	if err := gadget.Clear(); err != nil {
+		panic(err)
+	}
+	view := gadget.Viewport(modgadget.Bounds(0, 0, board.DisplayWidth, 16))
+	if err := view.SetText("Hello, ModGadget!"); err != nil {
+		panic(err)
+	}
+	if err := gadget.Render(); err != nil {
+		panic(err)
+	}
+	for {
+		time.Sleep(time.Second)
+	}
+}
+```
+
+From the application module containing this `main.go`, build with:
+
+```sh
+tinygo build -target=m5stamp-s3a .
+```
+
+For complete standalone applications that consume ModGadget and ModGadget
+Fonts as external module dependencies, see
+[ModGadget Examples](https://github.com/rdon-key/modgadget-examples).
+
 ## What ModGadget provides
 
 Current functionality includes:
@@ -86,6 +143,8 @@ Applications can:
 
 Glyph bitmaps and the internal font engine are intentionally not public APIs.
 
+See the [MGF1 file format](docs/mgf-format.md) for the binary font specification.
+
 Font sources, provenance, generation, and validation are maintained separately in [modgadget-font-assets](https://github.com/rdon-key/modgadget-font-assets).
 
 ## UI model
@@ -120,19 +179,26 @@ See [Public API](docs/public-api.md) for detailed rendering and memory behavior.
 
 ## Hardware
 
-The primary development platform is currently the M5Stack Cardputer ADV, based on the M5Stamp-S3A.
+ModGadget provides generic display, text, input, and device abstractions, but
+the only complete board integration currently included is the M5Stack
+Cardputer ADV, based on the M5Stamp-S3A.
 
-The current Cardputer ADV integration covers:
+That integration covers:
 
 * ST7789 240×135 display
 * Cardputer ADV keyboard
 * Cardputer ADV audio hardware
 
-Hardware-specific integration is kept separate from the generic display, text, and input APIs where practical.
+Hardware-specific integration is kept separate from the generic display, text,
+input, and audio APIs where practical. Other hardware may implement those
+interfaces, but ModGadget does not currently provide another complete board
+integration.
 
 ## Build
 
-A TinyGo development version containing the `m5stamp-s3a` target is currently required for Cardputer ADV applications.
+A TinyGo development build from the current `dev` branch is required for
+Cardputer ADV applications. The `m5stamp-s3a` target is not yet included in a
+stable TinyGo release.
 
 Applications using ModGadget are built normally with TinyGo, for example:
 
@@ -183,4 +249,3 @@ BSD 3-Clause.
 Parts of the ST7789 implementation are derived from `tinygo.org/x/drivers/st7789`.
 
 See `LICENSES/tinygo-drivers-BSD-3-Clause.txt`.
-
