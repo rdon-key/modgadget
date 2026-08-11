@@ -7,7 +7,7 @@ named `Style` entries, foreground/background colors, `<b>`, and `<br>`.
 Main APIs: `New`, `WithStyles`, `Viewport`, `SetText`, and `Render`.
 
 ```sh
-tinygo build -target <cardputer-adv-target> ./examples/multilingual-text
+tinygo build -target=m5stamp-s3a ./examples/multilingual-text
 ```
 
 Flashing is a separate operation and is not performed by this build command.

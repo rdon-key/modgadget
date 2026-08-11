@@ -9,8 +9,9 @@ Main APIs: `WithKeyboard`, `WithVolumeController`, and `Gadget.Update`. The
 audio `Player.Update` call remains in the same cooperative main loop.
 
 ```sh
-tinygo build -target <cardputer-adv-target> ./examples/cardputer-adv-audio
+tinygo build -target=m5stamp-s3a ./examples/cardputer-adv-audio
 ```
 
-Flashing is a separate operation. This is an experimental diagnostic, not a
-public ModGadget Audio API.
+Flashing is a separate operation. This is an experimental diagnostic for the
+Cardputer ADV integration, not an example of the public ModGadget Audio API.
+
