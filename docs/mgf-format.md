@@ -1,320 +1,148 @@
-# MGF1 フォントファイル形式（暫定仕様）
+# MGF1 font file format
 
-## 1. 目的
+MGF (ModGadget Font) is the binary bitmap-font format read by ModGadget. MGF1
+stores one font subset and an optional region hint in each file. It is designed
+for immutable data embedded with `go:embed`; the reader validates the complete
+file and retains a view of the source string without copying it.
 
-MGF（ModGadget Font）は、ModGadgetで使用するビットマップフォントを格納するためのバイナリ形式である。
+MGF1 uses little-endian byte order. All offsets are absolute byte offsets from
+the start of the file. The format has three contiguous regions:
 
-主な目的は次のとおり。
+1. a 36-byte header;
+2. an eight-byte entry for every glyph in the glyph index; and
+3. one uncompressed glyph record for every index entry.
 
-- 巨大なGoソースを生成せず、フォントを独立したファイルとして扱う
-- `go:embed`で埋め込み、実行時にコピーせず参照する
-- Unicodeのglyphを検索できる
-- 日本語、中国語など、地域によって字形が異なるフォントを選択しやすくする
-- 将来、U8g2方式を参考にしたglyph圧縮を利用する
-- TinyGoを含む小規模環境で、単純かつallocationを抑えて読み込めるようにする
+MGF1 has no compression, padding, extension region, checksum, kerning table, or
+automatic file-sharding mechanism.
 
-MGF1では、1ファイルに1フォント、1サブセット、1地域情報を格納する。
+## Header
 
-## 2. 基本方針
+The header is exactly 36 bytes.
 
-| 項目 | 方針 |
-|---|---|
-| Magic | 3byteの`MGF` |
-| Version | 1byteの数値 |
-| Byte order | little-endian |
-| FontId | 4byte固定ASCII |
-| SubsetId | 4byte固定ASCII |
-| Region | 2byteの地域ヒント |
-| GlyphCount | `uint16`、最大65,535 |
-| 1ファイルの上限 | 最大65,535 glyph |
-| Font区・分割番号 | MGF1では持たない |
-| LineGap | フォント推奨値として保持 |
-| 文字間隔 | ヘッダーには持たない |
-| Unicode | glyph index側で扱う |
-| 圧縮 | U8g2方式を参考にする予定。詳細は未確定 |
-
-単一regionのフォントが65,535 glyphを超える場合は、MGF1の対象外とする。分割ファイルや「区」の仕様は、必要になった時点で将来versionとして検討する。
-
-## 3. ファイル全体の構成
-
-| 順番 | 領域 | 内容 |
-|---:|---|---|
-| 1 | Header | ファイル識別、フォント識別、metrics、各領域の位置 |
-| 2 | Glyph Index | Unicode code pointからGlyph Recordを検索する索引 |
-| 3 | Glyph Data | glyph metricsと圧縮bitmap |
-| 4 | 将来拡張 | MGF1では使用しない |
-
-各offsetは、MGFファイル先頭からのbyte位置とする。
-
-Glyph Indexの形式は本仕様の第6節で定める。Glyph Dataの詳細形式は別途決定する。
-
-## 4. MGF1 Header
-
-MGF1のヘッダーは36byte固定とする。
-
-| Offset | Size | 型 | Field | 内容 |
-|---:|---:|---|---|---|
+| Offset | Size | Type | Field | Required value or meaning |
+| ---: | ---: | --- | --- | --- |
 | 0 | 3 | byte[3] | Magic | ASCII `MGF` |
-| 3 | 1 | uint8 | Version | MGF1は`1` |
-| 4 | 4 | byte[4] | FontId | 元フォントの短い識別子 |
-| 8 | 4 | byte[4] | SubsetId | サブセットの短い識別子 |
-| 12 | 2 | byte[2] | Region | 地域・字形選択のヒント |
-| 14 | 2 | uint16 | GlyphCount | 収録glyph数。最大65,535 |
-| 16 | 1 | uint8 | Ascent | baselineより上の標準高さ |
-| 17 | 1 | uint8 | Descent | baselineより下の標準高さ |
-| 18 | 1 | uint8 | LineGap | 推奨する追加行間 |
-| 19 | 1 | uint8 | MaxWidth | 全glyph中の最大bitmap幅 |
-| 20 | 1 | uint8 | MaxHeight | 全glyph中の最大bitmap高さ |
-| 21 | 1 | uint8 | Flags | MGF1では`0` |
-| 22 | 2 | uint16 | HeaderSize | MGF1では`36` |
-| 24 | 4 | uint32 | IndexOffset | Glyph Indexの開始位置 |
-| 28 | 4 | uint32 | GlyphDataOffset | Glyph Dataの開始位置 |
-| 32 | 4 | uint32 | FileSize | ファイル全体のbyte数 |
+| 3 | 1 | uint8 | Version | `1` |
+| 4 | 4 | byte[4] | FontID | Four printable ASCII bytes |
+| 8 | 4 | byte[4] | SubsetID | Four printable ASCII bytes |
+| 12 | 2 | byte[2] | Region | Two printable ASCII bytes, or two zero bytes |
+| 14 | 2 | uint16 | GlyphCount | Number of glyphs |
+| 16 | 1 | uint8 | Ascent | Recommended height above the baseline |
+| 17 | 1 | uint8 | Descent | Recommended height below the baseline |
+| 18 | 1 | uint8 | LineGap | Recommended additional line spacing |
+| 19 | 1 | uint8 | MaxWidth | Maximum glyph bitmap width in the file |
+| 20 | 1 | uint8 | MaxHeight | Maximum glyph bitmap height in the file |
+| 21 | 1 | uint8 | Flags | `0` |
+| 22 | 2 | uint16 | HeaderSize | `36` |
+| 24 | 4 | uint32 | IndexOffset | `36` |
+| 28 | 4 | uint32 | GlyphDataOffset | `36 + GlyphCount * 8` |
+| 32 | 4 | uint32 | FileSize | Exact length of the file |
 
-### 4.1 MagicとVersion
+`FontID`, `SubsetID`, and `Region` are metadata identifiers. Region does not
+describe character coverage; the glyph index is authoritative for coverage.
+MGF1 does not require these identifiers to be globally unique.
 
-先頭4byteで形式とversionを判定する。
+The recommended line height is:
 
-- byte 0〜2: `M`、`G`、`F`
-- byte 3: version番号
+```text
+Ascent + Descent + LineGap
+```
 
-文字列としての`MGF1`ではなく、versionは数値として格納する。
+Character advance is stored per glyph. Additional letter or line spacing is a
+layout concern and is not stored in MGF1.
 
-### 4.2 FontId
+Because `GlyphCount` is a `uint16`, a file can contain at most 65,535 glyphs.
 
-FontIdは元フォントを識別する4byte固定ASCIIである。
+## Glyph index
 
-| FontId | 意味 |
-|---|---|
-| `sh12` | 東雲12 |
-| `sp16` | Spleen 8×16 |
-| `qn08` | QuanPixel 8×8 |
-| `gn16` | GnuFont 16 |
+The index begins at byte 36 and contains exactly `GlyphCount` entries. Each
+entry is eight bytes:
 
-FontIdはUUIDではなく、同じアプリや配布物内で衝突しなければよい。世界的な一意性は要求しない。
-
-MGF1では、FontIdは印字可能なASCII文字4文字を必須とする。終端文字や可変長表現は使用しない。
-
-### 4.3 SubsetId
-
-SubsetIdは、同じ元フォントから生成した異なるサブセットを識別する4byte固定ASCIIである。
-
-| SubsetId | 意味 |
-|---|---|
-| `full` | 全収録文字版 |
-| `ui01` | UI用サブセット |
-| `news` | ニュース表示用 |
-| `usr1` | ユーザー作成サブセット |
-| `jp01` | 日本語向けサブセット第1版 |
-
-SubsetIdも世界的な一意性は要求しない。同じFontId、Regionの組み合わせ内で区別できればよい。
-
-MGF1では、SubsetIdは印字可能なASCII文字4文字を必須とする。
-
-### 4.4 Region
-
-Regionは、字形やfallback順序を決めるための2byteの地域ヒントである。
-
-| Region | 意味 |
-|---|---|
-| `JP` | 日本向け |
-| `CN` | 中国本土向け |
-| `TW` | 台湾向け |
-| `HK` | 香港向け |
-| `KR` | 韓国向け |
-| `US` | 米国向け |
-| `GB` | 英国向け |
-| `00 00` | 指定なし |
-
-Regionは、フォントが収録するUnicode範囲を示すものではない。実際にglyphが存在するかどうかはGlyph Indexで判断する。
-
-fallbackでは、次のような優先順位に利用できる。
-
-1. glyphが存在し、希望Regionと一致するフォント
-2. glyphが存在し、Region指定なしのフォント
-3. glyphが存在するその他のフォント
-
-Regionの利用方法はrendererまたはアプリ側の方針とし、MGF readerが自動的にfallbackを行う必要はない。
-
-### 4.5 Font identity
-
-MGFファイルの軽量な識別には、次の組み合わせを使用する。
-
-`FontId + SubsetId + Region`
-
-例：
-
-- `sh12 / full / JP`
-- `sh12 / ui01 / JP`
-- `sh12 / news / JP`
-- `sp16 / full / US`
-
-この組み合わせはglyph cacheやデバッグ表示に利用できる。ただし衝突しないことは利用者または生成者の責任とする。
-
-### 4.6 GlyphCount
-
-GlyphCountはlittle-endianの`uint16`である。
-
-- 最大値は65,535
-- MGF1では65,536 glyph以上を格納しない
-- 複数ファイルへ自動分割する仕様は持たない
-- 「Font区」「Shard番号」などのフィールドはMGF1では持たない
-
-### 4.7 Font metrics
-
-基本的なbaseline間隔は次で求める。
-
-`LineAdvance = Ascent + Descent + LineGap`
-
-| Field | 内容 |
-|---|---|
-| Ascent | baselineより上に確保する標準高さ |
-| Descent | baselineより下に確保する標準高さ |
-| LineGap | 行と行の間に追加する推奨間隔 |
-
-LineGapはフォントの推奨値であり、アプリやlayout側が別の行間を指定してもよい。
-
-### 4.8 文字間隔
-
-MGF1のヘッダーには文字間隔を持たせない。
-
-文字送りの基本値は各glyphの`AdvanceX`で表現する。追加の文字間隔はlayout側の設定として扱う。
-
-`NextPenX = PenX + Glyph.AdvanceX + Layout.LetterSpacing`
-
-## 5. Flags
-
-MGF1ではFlagsを`0`とし、非圧縮1-bit row-major bitmapを表す。
-
-将来、次のような属性に使用できる。
-
-- 固定幅フォント
-- 固定セル形式
-- proportional形式
-- icon font
-- 圧縮方式
-- Glyph Index形式
-
-ただし、意味が確定するまではbitを割り当てない。
-
-## 6. Glyph Index
-
-Glyph IndexはUnicode code pointからGlyph Data内のGlyph Record位置を検索するために使用する。
-MGF1では1 entry 8byteの固定長形式を使用する。
-
-| Offset | Size | 型 | Field | 内容 |
-|---:|---:|---|---|---|
+| Entry offset | Size | Type | Field | Meaning |
+| ---: | ---: | --- | --- | --- |
 | 0 | 4 | uint32 | Codepoint | Unicode scalar value |
-| 4 | 4 | uint32 | GlyphOffset | MGFファイル先頭からGlyph Record先頭までの絶対byte offset |
+| 4 | 4 | uint32 | GlyphOffset | Absolute offset of its glyph record |
 
-両fieldはlittle-endianで格納する。entryはCodepointの厳密な昇順とし、重複を許可しない。
-Codepointは`U+0000..U+D7FF`または`U+E000..U+10FFFF`のUnicode scalar valueとする。surrogateは許可しない。noncharacterは許可する。
+Code points must be valid Unicode scalar values: `U+0000..U+D7FF` or
+`U+E000..U+10FFFF`. Noncharacters are allowed. Entries must be in strictly
+increasing code-point order, with no duplicates, so readers can use binary
+search.
 
-Indexのサイズと位置は次のとおりとする。
+Glyph offsets must also be strictly increasing. Every offset must be at least
+`GlyphDataOffset` and less than `FileSize`. In the fully validated file, the
+first offset equals `GlyphDataOffset`, and each later offset equals the end of
+the preceding record.
 
+## Glyph records
+
+Each glyph record has a ten-byte header followed immediately by its bitmap.
+
+| Record offset | Size | Type | Field | Meaning |
+| ---: | ---: | --- | --- | --- |
+| 0 | 1 | uint8 | Width | Bitmap width in pixels |
+| 1 | 1 | uint8 | Height | Bitmap height in pixels |
+| 2 | 2 | int16 | AdvanceX | Horizontal pen advance |
+| 4 | 2 | int16 | BearingX | Horizontal distance from pen to bitmap left edge |
+| 6 | 2 | int16 | BearingY | Vertical distance from baseline to bitmap top edge |
+| 8 | 2 | uint16 | DataLength | Bitmap length in bytes |
+| 10 | N | byte[] | Bitmap | Raw one-bit bitmap data |
+
+Bitmap data is uncompressed and row-major. Rows run top to bottom, pixels run
+left to right, and the first pixel in each byte is its most significant bit.
+Every row begins on a byte boundary, so:
+
+```text
+rowBytes   = (Width + 7) / 8
+DataLength = rowBytes * Height
 ```
-IndexOffset = 36
-IndexSize = GlyphCount * 8
-GlyphDataOffset = 36 + GlyphCount * 8
+
+If either dimension is zero, `DataLength` is zero. Padding bits after the last
+pixel of a row have no defined value.
+
+Records are contiguous and appear in index order. MGF1 permits no gaps,
+overlaps, unreferenced records, duplicate offsets, or trailing data. The end of
+the final record must equal `FileSize`. `MaxWidth` and `MaxHeight` must equal
+the actual maxima across all records. If `GlyphCount` is zero, both maxima are
+zero and `GlyphDataOffset` equals `FileSize`.
+
+## Reader validation
+
+The current reader rejects a file unless all of the following hold:
+
+- the magic, version, identifiers, flags, fixed sizes, offsets, and file length
+  satisfy the header rules above;
+- the index occupies exactly `GlyphCount * 8` bytes and its code points and
+  offsets are valid and strictly increasing;
+- every glyph record fits in the file, its dimensions do not exceed the header
+  maxima, and its `DataLength` exactly matches the raw bitmap dimensions;
+- records cover the complete glyph-data region contiguously; and
+- the computed maximum dimensions equal the header values.
+
+Unknown versions and nonzero flags are rejected. MGF1 defines no compressed
+bitmap flag or forward-compatible extension data.
+
+## Go usage
+
+Applications normally import packaged fonts from
+[`modgadget-fonts`](https://github.com/rdon-key/modgadget-fonts). A package that
+embeds its own generated MGF can expose it through the root ModGadget API:
+
+```go
+package customfont
+
+import (
+	_ "embed"
+
+	"github.com/rdon-key/modgadget"
+)
+
+//go:embed custom.mgf
+var data string
+
+var Font = modgadget.MustOpenMGF(data)
 ```
 
-各GlyphOffsetは`GlyphDataOffset`以上、`FileSize`未満で、厳密な昇順でなければならない。重複offsetは許可しない。Glyph Recordの内容と長さはGlyph Indexでは検査しない。
-固定長entryのため、Codepointに対する検索にはbinary searchを使用できる。
-
-MGF1ではcheckpoint indexやcodepoint deltaを使用しない。これらは将来versionで容量削減が必要になった場合の検討事項とする。
-
-## 7. Glyph Data
-
-MGF1のGlyph Recordは10byteの固定長headerと可変長bitmap dataで構成する。
-
-| Offset | Size | 型 | Field | 内容 |
-|---:|---:|---|---|---|
-| 0 | 1 | uint8 | Width | bitmap幅 |
-| 1 | 1 | uint8 | Height | bitmap高さ |
-| 2 | 2 | int16 | AdvanceX | 次のpen位置までの距離 |
-| 4 | 2 | int16 | BearingX | pen位置からbitmap左端までの距離 |
-| 6 | 2 | int16 | BearingY | baselineからbitmap上端までの距離 |
-| 8 | 2 | uint16 | DataLength | bitmap dataのbyte数 |
-| 10 | N | byte[] | Bitmap | 非圧縮1-bit bitmap |
-
-複数byte値はlittle-endianで格納する。AdvanceX、BearingX、BearingYは符号付きint16とする。
-
-Flagsが`0`の場合、Bitmapは次の形式とする。
-
-- row-major、top-to-bottom、left-to-right
-- 1 pixelを1 bitで表現
-- 各byteはMSB first
-- 各rowはbyte境界から開始
-- 1行のbyte数は`(Width + 7) / 8`
-- `DataLength = ((Width + 7) / 8) * Height`
-- WidthまたはHeightが0の場合、DataLengthは0
-- row末尾の未使用bitの値は規定しない
-
-Glyph RecordはGlyph Indexと同じ順序で、`GlyphDataOffset`から隙間なく連続配置する。record間のpadding、overlap、未参照record、duplicate offset、末尾のtrailing dataを許可しない。最後のrecord直後が`FileSize`と一致しなければならない。
-
-HeaderのMaxWidthとMaxHeightは、全Glyph Recordにおける実際の最大Widthと最大Heightに一致しなければならない。GlyphCountが0の場合、MaxWidthとMaxHeightはともに0とする。
-
-bitmap圧縮とU8g2方式を参考にしたRLEは将来versionの検討事項とし、MGF1では使用しない。RLE用のFlags値も本versionでは定めない。
-
-## 8. `go:embed`での利用
-
-利用側では、MGFファイルをimmutableな`string`へ埋め込む。
-
-    package assets
-
-    import (
-        _ "embed"
-
-        "github.com/rdon-key/modgadget/font"
-    )
-
-    //go:embed shinonome12.mgf
-    var shinonome12Data string
-
-    var Shinonome12 = font.MustOpen(shinonome12Data)
-
-`font.Open`または`font.MustOpen`は、元のstring全体をコピーせず参照する。
-
-想定API：
-
-    func Open(data string) (Font, error)
-    func MustOpen(data string) Font
-    func (font *Font) Lookup(r rune) (Glyph, bool)
-
-## 9. Readerの基本検証
-
-MGF readerは最低限、次を検証する。
-
-- Magicが`MGF`
-- 対応するVersion
-- HeaderSizeが最低必要長以上
-- FileSizeが埋め込みデータ長と一致
-- IndexOffsetがHeaderSize以降
-- GlyphDataOffsetがIndexOffset以降
-- 各offsetがFileSize以内
-- GlyphCountとIndexの要素数が矛盾しない
-- FontIdとSubsetIdが4byteの印字可能ASCII
-- Regionが`00 00`または2byteの印字可能ASCII
-
-## 10. 今後決める項目
-
-- U8g2由来RLEの正確なbit形式
-- 固定セルフォントのmetrics省略方法
-- Flagsのbit割り当て
-- CRCまたはchecksumの要否
-- 未知version、未知flagsに対するreaderの互換性方針
-
-## 11. MGF1の要約
-
-- MGF1は`go:embed`向けの独立バイナリフォント形式とする。
-- ヘッダーは36byte固定。
-- Magicは3byteの`MGF`、Versionは1byte。
-- FontIdとSubsetIdは、それぞれ4byte固定ASCII。
-- Regionは2byteの地域・字形選択ヒント。
-- 1ファイルに最大65,535 glyphを格納する。
-- 65,535 glyphを超えるフォントの分割仕様は持たない。
-- 行送りはAscent、Descent、LineGapで表現する。
-- 追加の文字間隔はフォントではなくlayout側で扱う。
-- Glyph Indexは8byte固定長形式とする。
-- Glyph Recordは10byte headerと非圧縮1-bit bitmapで構成する。
-- bitmap圧縮は将来versionでU8g2方式を参考に検討するが、MGF全体は独自形式とする。
+Use `modgadget.OpenMGF` when malformed data should be returned as an error, or
+`modgadget.MustOpenMGF` for trusted static data where failure should panic.
+Both validate the entire MGF file and retain the embedded string; glyph bitmap
+data remains internal to ModGadget's opaque `Font` API.
