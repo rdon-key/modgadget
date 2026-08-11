@@ -5,13 +5,13 @@
 
 ## Scope
 
-The API polls a physical keyboard, dispatches `KeyEvent` values, and supports
+The API polls a keyboard source, dispatches `KeyEvent` values, and supports
 event consumption and listener removal. It does not provide Text mode, an IME,
 composition, focus, widgets, automatic key repeat, or a shortcut manager.
 
 `KeyEvent.Rune` is the single printable character produced directly by the
-keyboard's current keymap and modifiers. It is useful for an ASCII typing game,
-but it is not an IME commit string.
+keyboard source for that event. It is useful for direct character input, but it
+is not an IME commit string.
 
 ## Keyboard source
 
@@ -46,18 +46,14 @@ type KeyEvent struct {
 }
 ```
 
-- `Code` identifies the logical key after the keyboard applies its active
-  layer. Standard keys use USB HID Keyboard Usage IDs. `KeyFn` uses a
-  ModGadget-specific value because HID has no equivalent.
-- `Rune` is nonzero only for printable `KeyDown`. The Cardputer Aa layer
-  selects capitals and punctuation. Control, Alt, or Meta suppresses Rune so
-  shortcuts are not treated as text.
+- `Code` identifies the logical key reported by the source. Standard keys use
+  USB HID Keyboard Usage IDs. `KeyFn` uses a ModGadget-specific value because
+  HID has no equivalent.
+- `Rune` is a directly produced printable character, or zero when the event
+  does not produce one. It is not a text-composition or IME result.
 - `Action` is `KeyActionUnknown`, `KeyDown`, or `KeyUp`; there is no generated
   repeat action. The zero value is `KeyActionUnknown`, not a press.
 - `Modifiers` captures state at the event. `Has` can test combined bits.
-
-Enter, Backspace, Tab, Escape, arrows, modifiers, and all release events have a
-zero Rune.
 
 ### KeyCode values
 
@@ -75,8 +71,7 @@ The public key codes are:
 - `KeyLeftControl`, `KeyLeftShift`, `KeyLeftAlt`, `KeyLeftMeta`, and `KeyFn`.
 
 Except for `KeyFn`, their numeric values are the matching USB HID Keyboard/
-Keypad Usage IDs. The Cardputer adapter does not claim every public code is a
-separate physical key; its exact physical coverage is listed below.
+Keypad Usage IDs.
 
 ### Actions and modifiers
 
@@ -144,7 +139,8 @@ for {
 External applications use the public
 `github.com/rdon-key/modgadget/device/cardputeradv` package. Its
 `ConfigureKeyboard` function initializes the keyboard and returns a value that
-can be passed to `modgadget.WithKeyboard`:
+implements `modgadget.Keyboard`. The returned value also provides `Err()` for a
+retained hardware polling error. Pass it to `modgadget.WithKeyboard`:
 
 ```go
 keyboard, err := cardputeradv.ConfigureKeyboard()
@@ -156,7 +152,9 @@ gadget := modgadget.New(display, modgadget.WithKeyboard(keyboard))
 
 The same public package provides `ConfigureDisplay` and `ConfigureAudio` for
 applications that also need the Cardputer ADV display or audio player. The
-low-level keyboard implementation remains in `internal/keyboard/cardputeradv`;
+audio player must be configured before the keyboard because both devices use
+I2C0. The low-level keyboard implementation remains in
+`internal/keyboard/cardputeradv`;
 external modules do not import that implementation directly.
 
 The adapter talks to the TCA8418 at I2C address `0x34`. The controller provides
@@ -185,10 +183,17 @@ state recovery after event loss.
 
 The adapter follows M5Stack's
 [`M5Cardputer` Keyboard map](https://github.com/m5stack/M5Cardputer/blob/master/src/utility/Keyboard/Keyboard.h).
+It does not expose every public `KeyCode` as a separate physical key; its exact
+physical coverage is listed below.
 Aa changes printable Rune while Fn selects another logical Code. When a key has
 no dedicated Fn mapping, it still produces its base Code with `ModFn` and a zero
 Rune. TCA8418 register meanings follow the
 [Texas Instruments TCA8418 datasheet](https://www.ti.com/lit/ds/symlink/tca8418.pdf).
+
+For this adapter, Rune is nonzero only for printable `KeyDown` events. The Aa
+layer selects capitals and punctuation. Enter, Backspace, Tab, Escape, arrows,
+modifiers, Fn-layer keys, and all release events have a zero Rune. Control,
+Alt, or Meta also suppresses Rune so shortcuts are not treated as text.
 
 | Physical row | Normal | Aa/Shift | Fn |
 | --- | --- | --- | --- |
@@ -207,8 +212,9 @@ Examples:
 
 ### Standard volume keys
 
-When a `VolumeController` is supplied to `Gadget`, these shortcuts are handled
-before application listeners:
+On the Cardputer ADV, the adapter maps these physical shortcuts to the logical
+events handled before application listeners when a `VolumeController` is
+supplied to `Gadget`:
 
 ```text
 Fn + =    Volume Up
