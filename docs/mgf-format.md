@@ -1,9 +1,7 @@
 # MGF1 font file format
 
 MGF (ModGadget Font) is the binary bitmap-font format read by ModGadget. MGF1
-stores one font subset and an optional region hint in each file. It is designed
-for immutable data embedded with `go:embed`; the reader validates the complete
-file and retains a view of the source string without copying it.
+stores one font subset and an optional region hint in each file.
 
 MGF1 uses little-endian byte order. All offsets are absolute byte offsets from
 the start of the file. The format has three contiguous regions:
@@ -12,8 +10,8 @@ the start of the file. The format has three contiguous regions:
 2. an eight-byte entry for every glyph in the glyph index; and
 3. one uncompressed glyph record for every index entry.
 
-MGF1 has no compression, padding, extension region, checksum, kerning table, or
-automatic file-sharding mechanism.
+MGF1 has no compression, byte padding between regions or records, extension
+region, checksum, kerning table, or automatic file-sharding mechanism.
 
 ## Header
 
@@ -23,9 +21,9 @@ The header is exactly 36 bytes.
 | ---: | ---: | --- | --- | --- |
 | 0 | 3 | byte[3] | Magic | ASCII `MGF` |
 | 3 | 1 | uint8 | Version | `1` |
-| 4 | 4 | byte[4] | FontID | Four printable ASCII bytes |
-| 8 | 4 | byte[4] | SubsetID | Four printable ASCII bytes |
-| 12 | 2 | byte[2] | Region | Two printable ASCII bytes, or two zero bytes |
+| 4 | 4 | byte[4] | FontID | Four printable ASCII bytes (`0x20..0x7E`) |
+| 8 | 4 | byte[4] | SubsetID | Four printable ASCII bytes (`0x20..0x7E`) |
+| 12 | 2 | byte[2] | Region | Two printable ASCII bytes (`0x20..0x7E`), or two zero bytes |
 | 14 | 2 | uint16 | GlyphCount | Number of glyphs |
 | 16 | 1 | uint8 | Ascent | Recommended height above the baseline |
 | 17 | 1 | uint8 | Descent | Recommended height below the baseline |
