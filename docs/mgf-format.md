@@ -125,6 +125,10 @@ Applications normally import packaged fonts from
 [`modgadget-fonts`](https://github.com/rdon-key/modgadget-fonts). A package that
 embeds its own generated MGF can expose it through the root ModGadget API:
 
+
+Canonical font sources, provenance, generation, validation, and immutable MGF
+assets are maintained in [`modgadget-font-assets`](https://github.com/rdon-key/modgadget-font-assets).
+
 ```go
 package customfont
 
