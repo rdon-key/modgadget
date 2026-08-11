@@ -60,7 +60,7 @@ func main() {
 		panic(err)
 	}
 
-	view := gadget.Viewport(modgadget.Bounds(0, 0, 240, 24))
+	view := gadget.Viewport(modgadget.Bounds(0, 0, board.DisplayWidth, 24))
 	if err := view.SetText(
 		"<style=message>日本語の文字を表示します。</style>",
 	); err != nil {
@@ -120,6 +120,32 @@ For the M5Stack Cardputer ADV, the public
 `github.com/rdon-key/modgadget/device/cardputeradv` package provides
 board-specific display configuration through `ConfigureDisplay`.
 
+## Cardputer ADV device integration
+
+The `github.com/rdon-key/modgadget/device/cardputeradv` package is the complete
+board integration currently provided by ModGadget. Its public configuration
+entry points are:
+
+- `ConfigureDisplay()`
+- `ConfigureKeyboard()`
+- `ConfigureAudio()`
+
+`ConfigureDisplay` initializes the ST7789 panel and backlight. The returned
+`modgadget.Display` is passed to `modgadget.New`.
+
+`ConfigureKeyboard` returns a value that implements `modgadget.Keyboard` and
+also provides `Err()` for a retained hardware polling error. Pass it to
+`modgadget.WithKeyboard`. When an application uses both keyboard and audio,
+configure audio first because both devices use I2C0.
+
+`ConfigureAudio` returns the Cardputer ADV audio `Player` described below. The
+package also exports `DisplayWidth` (`240`) and `DisplayHeight` (`135`) for the
+configured display orientation.
+
+These functions connect Cardputer ADV hardware to the generic ModGadget APIs;
+applications using another board can provide their own implementations of the
+generic interfaces.
+
 ## Preparing a Font
 
 Ready-to-use generated fonts are distributed separately by
@@ -142,7 +168,6 @@ Available packages include:
 
 Applications can embed their own validated MGF asset without copying it:
 
-
 ```go
 //go:embed fonts/custom.mgf
 var fontData string
@@ -155,6 +180,9 @@ validation, character coverage, and line metrics without exposing glyph
 bitmaps or MGF internals. The zero Font is invalid and safe to inspect.
 External Font engine implementations are not currently a public extension
 point.
+
+See the [MGF1 file format](mgf-format.md) for the validated binary format used
+by `OpenMGF` and `MustOpenMGF`.
 
 `NewFontStack(primary, fallbacks...)` searches the primary first and then up
 to three fallbacks in argument order. Its metrics are the component-wise
@@ -230,9 +258,9 @@ func (g *Gadget) Clear() error
 `StyleSet.Default.Background`. It is explicit and is never called implicitly by
 `Render`. It does not change Viewport text or dirty state.
 
-The operation streams pixels with a reusable 64-byte scratch buffer rather than
-allocating a screen-sized framebuffer. Steady-state `Clear` has been tested at
-zero allocations. Display transfer errors are returned.
+The current implementation streams pixels with a reusable 64-byte scratch
+buffer rather than allocating a screen-sized framebuffer. Steady-state `Clear`
+has been tested at zero allocations. Display transfer errors are returned.
 
 ### Viewport, Update, and Render
 
@@ -383,7 +411,15 @@ overlapping or unusual loop cycles.
 `ScrollFromLeft` means that text appears from the left and travels right.
 `ScrollFromRight` means that text appears from the right and travels left.
 
+`Viewport.ScrollTo(pixel)` provides manual horizontal positioning. It clamps a
+negative pixel offset to zero, marks the Viewport dirty, and resets the start
+time used by a configured automatic scroll.
+
 ## Buffer and memory behavior
+
+ModGadget does not require a permanent full-screen framebuffer. The remaining
+details in this section describe the current implementation and may evolve
+without changing the public method signatures.
 
 Static Viewports use direct drawing. A normal horizontal scroll uses a Surface
 when speed is positive and the text is wider than the Viewport. A one-shot
@@ -426,6 +462,29 @@ An optional `VolumeController` enables standard shortcuts before application
 handlers: Fn+= raises volume, Fn+- lowers it, and Fn+M toggles mute. The KeyDown
 performs the operation; both it and its captured KeyUp are consumed, including
 when Fn is released first. Without a controller both remain ordinary key events.
+
+## Cardputer ADV audio
+
+The public `github.com/rdon-key/modgadget/audio/cardputeradv` package provides
+cooperative audio playback through `Player`. Configure a player with
+`device/cardputeradv.ConfigureAudio` (or directly with the audio package's
+`Configure` function).
+
+Applications can start a tone with `PlayTone` or one of the built-in
+`PatternStartup`, `PatternClick`, `PatternWrong`, and `PatternCorrect` sounds
+with `PlayPattern`. Playback advances only when the application calls
+`Player.Update`; `Busy` reports pending playback, and `Stop` cancels it and
+submits a finite silence chunk.
+
+Software volume uses the discrete `VolumeMute`, `VolumeLow`, `VolumeMedium`,
+and `VolumeHigh` levels. `SetVolume`, `Volume`, `VolumeUp`, `VolumeDown`,
+`Mute`, `Unmute`, `ToggleMute`, and `Muted` expose the volume state. `Player`
+also satisfies `modgadget.VolumeController`, so it can be passed to
+`WithVolumeController` for the standard keyboard shortcuts described above.
+
+See the standalone [`audio-beep`](https://github.com/rdon-key/modgadget-examples/tree/main/audio-beep)
+example for a minimal public-API playback loop using `PlayPattern`, `Busy`, `Update`,
+and `Stop`.
 
 ## Public API reference
 
@@ -489,6 +548,7 @@ Only identifiers currently exported by the root package are listed here.
 | --- | --- | --- |
 | `type Font` | Opaque, copyable font handle | Zero value is invalid and safe |
 | `type FontMetrics` | Baseline-relative Ascent, Descent, and LineGap | Values define the font's line metrics |
+| `func (FontMetrics) LineHeight() int16` | Returns Ascent + Descent + LineGap | No error |
 | `func (Font) Valid() bool` | Reports whether a Font is usable | False for zero Font |
 | `func (Font) HasGlyph(r rune) bool` | Reports character coverage | Does not expose bitmap data |
 | `func (Font) Metrics() FontMetrics` | Returns line metrics | Zero metrics for zero Font |
@@ -535,6 +595,16 @@ Only identifiers currently exported by the root package are listed here.
 | `type ListenerID uint16` | Listener identity | Zero is invalid |
 | `func (g *Gadget) OnKey(handler KeyHandler) ListenerID` | Registers in call order | Nil returns zero |
 | `func (g *Gadget) RemoveListener(id ListenerID) bool` | Removes by ID | Reports whether it removed a live listener |
+
+## Related documentation
+
+- The [root README](../README.md) provides the project overview, minimal
+  application, current hardware support, and build command.
+- [Core examples](../examples/) demonstrate individual APIs inside this
+  repository.
+- [ModGadget Examples](https://github.com/rdon-key/modgadget-examples) contains
+  practical standalone applications that consume ModGadget and ModGadget Fonts
+  as module dependencies.
 
 ## Current limitations
 
