@@ -16,6 +16,7 @@ const (
 	Version1       = 1
 	CodecDeflate   = 1
 	blockDeflated  = 1
+	cacheSlots     = 4
 )
 
 type Header struct {
@@ -39,15 +40,23 @@ type block struct {
 	flags                     uint32
 }
 
-// Font retains the source data and one expanded block. A Font is not safe for
-// concurrent Lookup calls; callers should share it through the public handle.
+type cacheEntry struct {
+	block uint32
+	raw   string
+}
+
+// Font retains the source data and up to four expanded blocks in LRU order.
+// The source data is referenced without copying. Expansion buffers are
+// allocated only as their slots are filled, using at most four raw block sizes
+// plus roughly 100 bytes of cache metadata on a 64-bit system. A Font is not
+// safe for concurrent Lookup calls; callers should share it through the public
+// handle.
 type Font struct {
 	data                   string
 	header                 Header
 	glyphTable, blockTable uint32
-	cacheBlock             uint32
-	cache                  string
-	cacheValid             bool
+	cache                  [cacheSlots]cacheEntry
+	cacheLen               uint8
 	inflations             uint64
 }
 
@@ -94,7 +103,7 @@ func Open(data string) (*Font, error) {
 	if uint64(gt) != HeaderSize || uint64(bt) != uint64(gt)+uint64(gc)*GlyphEntrySize || uint64(bd) != uint64(bt)+uint64(bc)*BlockEntrySize || uint64(bd) > uint64(len(data)) {
 		return nil, fmt.Errorf("mgz: noncanonical or out-of-range table offsets")
 	}
-	f := &Font{data: data, glyphTable: gt, blockTable: bt, cacheBlock: math.MaxUint32}
+	f := &Font{data: data, glyphTable: gt, blockTable: bt}
 	copy(f.header.FontID[:], data[8:12])
 	copy(f.header.SubsetID[:], data[12:16])
 	copy(f.header.Region[:], data[16:18])
@@ -260,8 +269,15 @@ func (f *Font) validateGlyphs() error {
 }
 
 func (f *Font) expand(index uint32, cache bool) (string, error) {
-	if cache && f.cacheValid && f.cacheBlock == index {
-		return f.cache, nil
+	if cache {
+		for i := 0; i < int(f.cacheLen); i++ {
+			if f.cache[i].block == index {
+				hit := f.cache[i]
+				copy(f.cache[1:i+1], f.cache[:i])
+				f.cache[0] = hit
+				return hit.raw, nil
+			}
+		}
 	}
 	b := f.blockAt(index)
 	stored := f.data[int(b.offset):int(b.offset+b.storedLen)]
@@ -278,7 +294,14 @@ func (f *Font) expand(index uint32, cache bool) (string, error) {
 		return "", fmt.Errorf("mgz: block %d expands to %d bytes, want %d", index, len(raw), b.rawLen)
 	}
 	if cache {
-		f.cacheBlock, f.cache, f.cacheValid = index, raw, true
+		n := int(f.cacheLen)
+		if n < len(f.cache) {
+			f.cacheLen++
+		} else {
+			n--
+		}
+		copy(f.cache[1:n+1], f.cache[:n])
+		f.cache[0] = cacheEntry{block: index, raw: raw}
 		if b.flags == blockDeflated {
 			f.inflations++
 		}

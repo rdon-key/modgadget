@@ -78,6 +78,65 @@ func makeFont(t *testing.T, compressed bool) string {
 	return string(d)
 }
 
+func makeBlockFont(t *testing.T, blocks int) string {
+	t.Helper()
+	const rawLen = 16
+	gt := HeaderSize
+	bt := gt + blocks*GlyphEntrySize
+	bd := bt + blocks*BlockEntrySize
+	stored := make([][]byte, blocks)
+	size := bd
+	for i := range stored {
+		var compressed bytes.Buffer
+		w, err := flate.NewWriter(&compressed, flate.BestCompression)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := w.Write([]byte(strings.Repeat(string(rune('a'+i)), rawLen))); err != nil {
+			t.Fatal(err)
+		}
+		if err := w.Close(); err != nil {
+			t.Fatal(err)
+		}
+		stored[i] = compressed.Bytes()
+		size += len(stored[i])
+	}
+
+	d := make([]byte, size)
+	copy(d, "MGZ1")
+	le := binary.LittleEndian
+	le.PutUint16(d[4:], Version1)
+	le.PutUint16(d[6:], HeaderSize)
+	copy(d[8:], "testfullJP")
+	le.PutUint32(d[20:], uint32(size))
+	le.PutUint32(d[24:], uint32(blocks))
+	le.PutUint32(d[28:], uint32(blocks))
+	le.PutUint16(d[32:], 1)
+	le.PutUint16(d[34:], CodecDeflate)
+	d[36], d[37], d[38], d[39], d[40] = 10, 2, 1, 128, 1
+	le.PutUint32(d[44:], uint32(gt))
+	le.PutUint32(d[48:], uint32(bt))
+	le.PutUint32(d[52:], uint32(bd))
+
+	dataOff := bd
+	for i := 0; i < blocks; i++ {
+		gp := gt + i*GlyphEntrySize
+		le.PutUint32(d[gp:], uint32('A'+i))
+		d[gp+4], d[gp+5] = 128, 1
+		le.PutUint16(d[gp+6:], rawLen)
+		le.PutUint16(d[gp+12:], rawLen)
+
+		bp := bt + i*BlockEntrySize
+		le.PutUint32(d[bp:], uint32(dataOff))
+		le.PutUint32(d[bp+4:], uint32(len(stored[i])))
+		le.PutUint32(d[bp+8:], rawLen)
+		le.PutUint32(d[bp+12:], blockDeflated)
+		copy(d[dataOff:], stored[i])
+		dataOff += len(stored[i])
+	}
+	return string(d)
+}
+
 func TestOpenLookupRawAndDeflate(t *testing.T) {
 	for _, compressed := range []bool{false, true} {
 		f, err := Open(makeFont(t, compressed))
@@ -116,6 +175,68 @@ func TestCacheReuseAndBitmapLifetime(t *testing.T) {
 	}
 	if a.Bitmap != "aaaaaaaaaaaaaaaa" {
 		t.Fatalf("expired bitmap %q", a.Bitmap)
+	}
+}
+
+func TestCacheAlternatingBlocksDoesNotReinflate(t *testing.T) {
+	f := MustOpen(makeBlockFont(t, 2))
+	for i := 0; i < 2; i++ {
+		if _, ok := f.Lookup(rune('A' + i%2)); !ok {
+			t.Fatalf("lookup %d failed", i)
+		}
+	}
+	lookup := 0
+	allocations := testing.AllocsPerRun(100, func() {
+		if _, ok := f.Lookup(rune('A' + lookup%2)); !ok {
+			t.Fatalf("lookup %d failed", lookup)
+		}
+		lookup++
+	})
+	if allocations != 0 {
+		t.Fatalf("cache-hit allocations=%v, want 0", allocations)
+	}
+	if f.inflations != 2 {
+		t.Fatalf("inflations=%d, want 2", f.inflations)
+	}
+}
+
+func TestCacheLRUEviction(t *testing.T) {
+	f := MustOpen(makeBlockFont(t, 5))
+	var evicted Glyph
+	for r := 'A'; r <= 'D'; r++ {
+		g, ok := f.Lookup(r)
+		if !ok {
+			t.Fatalf("lookup %q failed", r)
+		}
+		if r == 'B' {
+			evicted = g
+		}
+	}
+	_, _ = f.Lookup('A') // Make A most recently used; B is now the LRU block.
+	_, _ = f.Lookup('E') // Evict B.
+	if evicted.Bitmap != strings.Repeat("b", 16) {
+		t.Fatalf("expired bitmap %q", evicted.Bitmap)
+	}
+	_, _ = f.Lookup('A') // A must still be cached.
+	if f.inflations != 5 {
+		t.Fatalf("inflations before evicted lookup=%d, want 5", f.inflations)
+	}
+	_, _ = f.Lookup('B')
+	if f.inflations != 6 {
+		t.Fatalf("inflations after evicted lookup=%d, want 6", f.inflations)
+	}
+}
+
+func TestValidateAllDoesNotChangeCache(t *testing.T) {
+	f := MustOpen(makeBlockFont(t, 5))
+	_, _ = f.Lookup('C')
+	want := f.cache
+	wantLen, wantInflations := f.cacheLen, f.inflations
+	if err := f.ValidateAll(); err != nil {
+		t.Fatal(err)
+	}
+	if f.cache != want || f.cacheLen != wantLen || f.inflations != wantInflations {
+		t.Fatalf("ValidateAll changed cache or inflation count")
 	}
 }
 
@@ -200,7 +321,7 @@ func TestOpenDoesNotExpandDeflate(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if f.cacheValid || f.inflations != 0 {
-		t.Fatalf("cache=%v inflations=%d", f.cacheValid, f.inflations)
+	if f.cacheLen != 0 || f.inflations != 0 {
+		t.Fatalf("cache entries=%d inflations=%d", f.cacheLen, f.inflations)
 	}
 }
