@@ -223,10 +223,10 @@ func TestWrappedTextLayoutIntegration(t *testing.T) {
 	}
 	backend := &fakeBackend{}
 	baseline, err := layout.Draw(backend, 0, 0, make([]byte, 2))
-	if err != nil || baseline != measurement.AdvanceY || len(backend.rects) != 4 {
+	if err != nil || baseline != measurement.AdvanceY || len(backend.rects) != 2 {
 		t.Fatalf("baseline=%d rects=%v err=%v", baseline, backend.rects, err)
 	}
-	if string(backend.writes[0]) != "\xff\xff" || string(backend.writes[2]) != "\x07\xe0" {
+	if string(backend.writes[0]) != "\x07\xe0" {
 		t.Fatalf("writes=%x", backend.writes)
 	}
 

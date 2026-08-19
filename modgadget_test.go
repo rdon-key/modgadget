@@ -1,11 +1,13 @@
 package modgadget
 
 import (
+	"encoding/binary"
 	"errors"
 	"testing"
 	"time"
 
 	"github.com/rdon-key/modgadget/internal/display"
+	"github.com/rdon-key/modgadget/internal/mgz"
 	"github.com/rdon-key/modgadget/internal/text"
 )
 
@@ -28,6 +30,23 @@ func (f testFont) Lookup(r rune) (text.Glyph, bool) {
 	return text.Glyph{Width: width, Height: 8, AdvanceX: f.advance, BearingY: 8, Bitmap: bitmap}, true
 }
 func (testFont) Metrics() text.FontMetrics { return text.FontMetrics{Ascent: 8} }
+
+type countingViewportFont struct {
+	metadataCalls int
+	bitmapCalls   int
+}
+
+func (font *countingViewportFont) LookupMetadata(r rune) (text.GlyphMetadata, bool) {
+	font.metadataCalls++
+	return text.GlyphMetadata{Width: 10, Height: 8, AdvanceX: 10, BearingY: 8}, true
+}
+
+func (font *countingViewportFont) Lookup(r rune) (text.Glyph, bool) {
+	font.bitmapCalls++
+	return text.Glyph{Width: 10, Height: 8, AdvanceX: 10, BearingY: 8, Bitmap: testBitmap}, true
+}
+
+func (*countingViewportFont) Metrics() text.FontMetrics { return text.FontMetrics{Ascent: 8} }
 
 type testDisplay struct {
 	width, height int16
@@ -97,6 +116,80 @@ func TestViewportBounds(t *testing.T) {
 	}
 	if !found {
 		t.Fatal("bounded viewport was not forwarded to display")
+	}
+}
+
+func TestViewportMetadataMeasurementAndVisibleBitmapLookups(t *testing.T) {
+	font := &countingViewportFont{}
+	styles := StyleSet{Default: Style{Font: Font{impl: font}, Foreground: ColorWhite}}
+	v := New(&allocationDisplay{}, WithStyles(styles)).Viewport()
+	if err := v.SetText("aaaaa"); err != nil {
+		t.Fatal(err)
+	}
+	if font.metadataCalls == 0 || font.bitmapCalls != 0 {
+		t.Fatalf("SetText metadata=%d bitmap=%d", font.metadataCalls, font.bitmapCalls)
+	}
+
+	v.SetHorizontalScroll(ScrollSpeed(1))
+	v.ScrollTo(20)
+	font.metadataCalls, font.bitmapCalls = 0, 0
+	if err := v.owner.Render(); err != nil {
+		t.Fatal(err)
+	}
+	if font.metadataCalls != 5 || font.bitmapCalls != 2 {
+		t.Fatalf("Render metadata=%d bitmap=%d, want 5/2", font.metadataCalls, font.bitmapCalls)
+	}
+}
+
+func brokenSingleGlyphMGZ() string {
+	const glyphTable = mgz.HeaderSize
+	const blockTable = glyphTable + mgz.GlyphEntrySize
+	const blockData = blockTable + mgz.BlockEntrySize
+	d := make([]byte, blockData+1)
+	copy(d, "MGZ1")
+	le := binary.LittleEndian
+	le.PutUint16(d[4:], mgz.Version1)
+	le.PutUint16(d[6:], mgz.HeaderSize)
+	le.PutUint32(d[20:], uint32(len(d)))
+	le.PutUint32(d[24:], 1)
+	le.PutUint32(d[28:], 1)
+	le.PutUint16(d[32:], 1)
+	le.PutUint16(d[34:], mgz.CodecDeflate)
+	d[36], d[39], d[40] = 8, 8, 1
+	le.PutUint32(d[44:], glyphTable)
+	le.PutUint32(d[48:], blockTable)
+	le.PutUint32(d[52:], blockData)
+	le.PutUint32(d[glyphTable:], 'A')
+	d[glyphTable+4], d[glyphTable+5] = 8, 1
+	le.PutUint16(d[glyphTable+6:], 10)
+	le.PutUint16(d[glyphTable+10:], 1)
+	le.PutUint16(d[glyphTable+12:], 1)
+	le.PutUint32(d[blockTable:], blockData)
+	le.PutUint32(d[blockTable+4:], 1)
+	le.PutUint32(d[blockTable+8:], 1)
+	le.PutUint32(d[blockTable+12:], 1)
+	d[blockData] = 0 // Invalid raw DEFLATE, deliberately deferred by Open.
+	return string(d)
+}
+
+func TestViewportFontStackDoesNotExpandInvisibleMGZGlyph(t *testing.T) {
+	source := mgz.MustOpen(brokenSingleGlyphMGZ())
+	stack, err := NewFontStack(Font{impl: mgzFont{source: source}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	styles := StyleSet{Default: Style{Font: stack, Foreground: ColorWhite}}
+	v := New(&allocationDisplay{}, WithStyles(styles)).Viewport(Bounds(0, 0, 5, 10))
+	if err := v.SetText("A"); err != nil {
+		t.Fatal(err)
+	}
+	v.SetHorizontalScroll(ScrollSpeed(1))
+	v.ScrollTo(10)
+	if err := v.owner.Render(); err != nil {
+		t.Fatalf("invisible MGZ glyph was expanded: %v", err)
+	}
+	if _, ok := source.Lookup('A'); ok {
+		t.Fatal("broken DEFLATE unexpectedly passed normal Lookup")
 	}
 }
 

@@ -185,12 +185,12 @@ func TestDrawSpansSwitchesFacesAndColorsAndReusesScratch(t *testing.T) {
 	if err != nil || pen != 7 {
 		t.Fatalf("pen=%d err=%v", pen, err)
 	}
-	wantRects := []display.Rect{{X: 0, Y: -1, Width: 2, Height: 1}, {X: 4, Y: 1, Width: 2, Height: 1}}
-	if len(backend.rects) != 2 || backend.rects[0] != wantRects[0] || backend.rects[1] != wantRects[1] {
+	wantRects := []display.Rect{{X: 4, Y: 1, Width: 2, Height: 1}}
+	if len(backend.rects) != 1 || backend.rects[0] != wantRects[0] {
 		t.Fatalf("rects=%v want %v", backend.rects, wantRects)
 	}
-	wantWrites := [][]byte{{0x12, 0x34, 0xab, 0xcd}, {0x56, 0x78, 0x9a, 0xbc}}
-	if len(backend.writes) != 2 {
+	wantWrites := [][]byte{{0x56, 0x78, 0x9a, 0xbc}}
+	if len(backend.writes) != 1 {
 		t.Fatalf("writes=%x", backend.writes)
 	}
 	for index := range wantWrites {
@@ -198,8 +198,8 @@ func TestDrawSpansSwitchesFacesAndColorsAndReusesScratch(t *testing.T) {
 			t.Fatalf("write %d=%x want %x", index, backend.writes[index], wantWrites[index])
 		}
 	}
-	if string(scratch) != string(wantWrites[1]) {
-		t.Fatalf("scratch=%x want %x", scratch, wantWrites[1])
+	if string(scratch) != string(wantWrites[0]) {
+		t.Fatalf("scratch=%x want %x", scratch, wantWrites[0])
 	}
 }
 

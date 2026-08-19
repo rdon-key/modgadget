@@ -82,12 +82,11 @@ func TestTextLayoutDrawsRepeatedlyWithSavedStyles(t *testing.T) {
 		if err != nil || baseline != wantMeasurement.AdvanceY {
 			t.Fatalf("baseline=%d want=%d err=%v", baseline, wantMeasurement.AdvanceY, err)
 		}
-		if unionRects(backend.rects) != wantMeasurement.Bounds {
-			t.Fatalf("rect bounds=%+v want=%+v", unionRects(backend.rects), wantMeasurement.Bounds)
+		wantVisible := Bounds{MinX: 0, MinY: 2, MaxX: 2, MaxY: 3}
+		if unionRects(backend.rects) != wantVisible {
+			t.Fatalf("rect bounds=%+v want=%+v", unionRects(backend.rects), wantVisible)
 		}
 		wantWrites := [][]byte{
-			{0x12, 0x34, 0xab, 0xcd},
-			{0x56, 0x78, 0x9a, 0xbc},
 			{0x56, 0x78, 0x9a, 0xbc},
 		}
 		if !reflect.DeepEqual(backend.writes, wantWrites) {

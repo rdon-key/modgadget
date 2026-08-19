@@ -229,7 +229,8 @@ func TestBlockMeasurementAndDrawingAgree(t *testing.T) {
 	}
 	backend := &fakeBackend{}
 	baseline, err := DrawLines(backend, lines, 0, 0, make([]byte, 2))
-	if err != nil || baseline != measurement.AdvanceY || unionRects(backend.rects) != measurement.Bounds {
+	wantVisible := Bounds{MinX: 0, MinY: 2, MaxX: 1, MaxY: 3}
+	if err != nil || baseline != measurement.AdvanceY || unionRects(backend.rects) != wantVisible {
 		t.Fatalf("baseline=%d block=%+v rects=%v err=%v", baseline, measurement, backend.rects, err)
 	}
 	line, err := MeasureLine(lines[0].Spans)

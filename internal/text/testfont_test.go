@@ -56,6 +56,38 @@ type fixedFont struct {
 	}
 }
 
+type countingMetadataFont struct {
+	metrics FontMetrics
+	glyphs  [8]struct {
+		r rune
+		g Glyph
+	}
+	metadataCalls int
+	bitmapCalls   int
+}
+
+func (font *countingMetadataFont) LookupMetadata(r rune) (GlyphMetadata, bool) {
+	font.metadataCalls++
+	for i := range font.glyphs {
+		if font.glyphs[i].r == r {
+			return metadataFromGlyph(font.glyphs[i].g), true
+		}
+	}
+	return GlyphMetadata{}, false
+}
+
+func (font *countingMetadataFont) Lookup(r rune) (Glyph, bool) {
+	font.bitmapCalls++
+	for i := range font.glyphs {
+		if font.glyphs[i].r == r {
+			return font.glyphs[i].g, true
+		}
+	}
+	return Glyph{}, false
+}
+
+func (font *countingMetadataFont) Metrics() FontMetrics { return font.metrics }
+
 func (font *fixedFont) Lookup(r rune) (Glyph, bool) {
 	for index := range font.glyphs {
 		if font.glyphs[index].r == r {

@@ -14,6 +14,15 @@ type Glyph struct {
 	Bitmap   string
 }
 
+// GlyphMetadata is glyph placement information without bitmap data.
+type GlyphMetadata struct {
+	Width    int16
+	Height   int16
+	AdvanceX int16
+	BearingX int16
+	BearingY int16
+}
+
 // FontMetrics describes a font's baseline-relative line box.
 type FontMetrics struct {
 	Ascent  int16
@@ -30,6 +39,34 @@ func (metrics FontMetrics) LineHeight() int16 {
 type Font interface {
 	Lookup(r rune) (Glyph, bool)
 	Metrics() FontMetrics
+}
+
+// MetadataFont optionally provides glyph placement without loading a bitmap.
+type MetadataFont interface {
+	LookupMetadata(r rune) (GlyphMetadata, bool)
+}
+
+// LookupMetadata uses a font's metadata-only path when available and otherwise
+// falls back to Lookup.
+func LookupMetadata(font Font, r rune) (GlyphMetadata, bool) {
+	if font == nil {
+		return GlyphMetadata{}, false
+	}
+	if metadataFont, ok := font.(MetadataFont); ok {
+		return metadataFont.LookupMetadata(r)
+	}
+	glyph, ok := font.Lookup(r)
+	if !ok {
+		return GlyphMetadata{}, false
+	}
+	return metadataFromGlyph(glyph), true
+}
+
+func metadataFromGlyph(glyph Glyph) GlyphMetadata {
+	return GlyphMetadata{
+		Width: glyph.Width, Height: glyph.Height, AdvanceX: glyph.AdvanceX,
+		BearingX: glyph.BearingX, BearingY: glyph.BearingY,
+	}
 }
 
 // FontStack searches fonts of the same display size in priority order.
@@ -54,6 +91,23 @@ func (stack FontStack) Lookup(r rune) (Glyph, bool) {
 		}
 	}
 	return Glyph{}, false
+}
+
+// LookupMetadata searches Primary followed by Fallbacks in array order.
+func (stack FontStack) LookupMetadata(r rune) (GlyphMetadata, bool) {
+	if stack.Primary != nil {
+		if glyph, ok := LookupMetadata(stack.Primary, r); ok {
+			return glyph, true
+		}
+	}
+	for index := range stack.Fallbacks {
+		if stack.Fallbacks[index] != nil {
+			if glyph, ok := LookupMetadata(stack.Fallbacks[index], r); ok {
+				return glyph, true
+			}
+		}
+	}
+	return GlyphMetadata{}, false
 }
 
 // Metrics returns the component-wise maximum line metrics.

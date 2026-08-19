@@ -178,6 +178,39 @@ func TestCacheReuseAndBitmapLifetime(t *testing.T) {
 	}
 }
 
+func TestLookupMetadataDoesNotAccessCache(t *testing.T) {
+	data := []byte(makeFont(t, true))
+	binary.LittleEndian.PutUint16(data[HeaderSize+6:], uint16(17))
+	binary.LittleEndian.PutUint16(data[HeaderSize+8:], ^uint16(2))
+	binary.LittleEndian.PutUint16(data[HeaderSize+10:], uint16(int16(4)))
+	f := MustOpen(string(data))
+	metadata, ok := f.LookupMetadata('A')
+	if !ok || metadata != (GlyphMetadata{Width: 128, Height: 1, AdvanceX: 17, BearingX: -3, BearingY: 4}) {
+		t.Fatalf("metadata=%+v ok=%v", metadata, ok)
+	}
+	if _, ok := f.LookupMetadata('Z'); ok {
+		t.Fatal("missing glyph metadata found")
+	}
+	if f.cacheLen != 0 || f.inflations != 0 {
+		t.Fatalf("cache entries=%d inflations=%d", f.cacheLen, f.inflations)
+	}
+	if allocations := testing.AllocsPerRun(100, func() {
+		_, _ = f.LookupMetadata('A')
+		_, _ = f.LookupMetadata('Z')
+	}); allocations != 0 {
+		t.Fatalf("LookupMetadata allocations=%v", allocations)
+	}
+
+	_, _ = f.Lookup('A')
+	_, _ = f.Lookup(rune(0x3042))
+	want := f.cache
+	wantLen, wantInflations := f.cacheLen, f.inflations
+	_, _ = f.LookupMetadata('A')
+	if f.cache != want || f.cacheLen != wantLen || f.inflations != wantInflations {
+		t.Fatal("LookupMetadata changed populated cache")
+	}
+}
+
 func TestCacheAlternatingBlocksDoesNotReinflate(t *testing.T) {
 	f := MustOpen(makeBlockFont(t, 2))
 	for i := 0; i < 2; i++ {
@@ -265,6 +298,12 @@ func TestBrokenDeflateIsDeferredUntilLookup(t *testing.T) {
 	}
 	if f.inflations != 0 {
 		t.Fatalf("Open inflations=%d", f.inflations)
+	}
+	if metadata, ok := f.LookupMetadata(rune(0x3042)); !ok || metadata.Width != 128 || metadata.Height != 1 {
+		t.Fatalf("metadata=%+v ok=%v", metadata, ok)
+	}
+	if f.cacheLen != 0 || f.inflations != 0 {
+		t.Fatalf("metadata lookup changed cache: entries=%d inflations=%d", f.cacheLen, f.inflations)
 	}
 	if _, ok := f.Lookup('あ'); ok {
 		t.Fatal("Lookup accepted broken DEFLATE")

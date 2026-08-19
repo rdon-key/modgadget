@@ -92,6 +92,16 @@ func (font mgzFont) Lookup(r rune) (text.Glyph, bool) {
 	}
 	return text.Glyph{Width: int16(g.Width), Height: int16(g.Height), AdvanceX: g.AdvanceX, BearingX: g.BearingX, BearingY: g.BearingY, Bitmap: g.Bitmap}, true
 }
+func (font mgzFont) LookupMetadata(r rune) (text.GlyphMetadata, bool) {
+	g, ok := font.source.LookupMetadata(r)
+	if !ok {
+		return text.GlyphMetadata{}, false
+	}
+	return text.GlyphMetadata{
+		Width: int16(g.Width), Height: int16(g.Height), AdvanceX: g.AdvanceX,
+		BearingX: g.BearingX, BearingY: g.BearingY,
+	}, true
+}
 func (font mgzFont) Metrics() text.FontMetrics {
 	h := font.source.Header()
 	return text.FontMetrics{Ascent: int16(h.Ascent), Descent: int16(h.Descent), LineGap: int16(h.LineGap)}
@@ -129,6 +139,15 @@ func (stack fontStack) Lookup(r rune) (text.Glyph, bool) {
 		}
 	}
 	return text.Glyph{}, false
+}
+
+func (stack fontStack) LookupMetadata(r rune) (text.GlyphMetadata, bool) {
+	for i := uint8(0); i < stack.count; i++ {
+		if glyph, ok := text.LookupMetadata(stack.fonts[i], r); ok {
+			return glyph, true
+		}
+	}
+	return text.GlyphMetadata{}, false
 }
 
 func (stack fontStack) Metrics() text.FontMetrics {

@@ -41,13 +41,14 @@ func drawFontValue(backend display.Backend, face Font, penX, baselineY int16, va
 
 func drawStyledFontValue(backend display.Backend, face Font, penX, baselineY int16, value string, foreground, background display.Color565, bold bool, scratch []byte) (int16, error) {
 	currentX := penX
+	backendWidth, backendHeight := backend.Size()
 	for _, r := range value {
 		position, err := positionGlyph(face, r, currentX, baselineY)
 		if err != nil {
 			return currentX, err
 		}
-		glyph := position.glyph
-		width, height := int(glyph.Width), int(glyph.Height)
+		metadata := position.glyph
+		width, height := int(metadata.Width), int(metadata.Height)
 		if width != 0 && height != 0 {
 			drawWidth := width
 			if bold {
@@ -56,11 +57,23 @@ func drawStyledFontValue(backend display.Backend, face Font, penX, baselineY int
 			if drawWidth > math.MaxInt16 {
 				return currentX, fmt.Errorf("text: bold glyph U+%04X width is outside int16", r)
 			}
+			left, top := int32(position.x), int32(position.y)
+			right := left + int32(drawWidth)
+			bottom := top + int32(height)
+			visible := left < int32(backendWidth) && right > 0 && top < int32(backendHeight) && bottom > 0
+			if !visible {
+				currentX = position.nextX
+				continue
+			}
+			glyph, ok := face.Lookup(r)
+			if !ok {
+				return currentX, fmt.Errorf("text: glyph U+%04X is missing or invalid", r)
+			}
 			rowPixelBytes := drawWidth * 2
 			if len(scratch) < rowPixelBytes {
 				return currentX, fmt.Errorf("text: scratch too small for glyph U+%04X: have %d bytes, need %d", r, len(scratch), rowPixelBytes)
 			}
-			rect := display.Rect{X: position.x, Y: position.y, Width: int16(drawWidth), Height: glyph.Height}
+			rect := display.Rect{X: position.x, Y: position.y, Width: int16(drawWidth), Height: metadata.Height}
 			if err := backend.BeginRect(rect.X, rect.Y, rect.Width, rect.Height); err != nil {
 				return currentX, fmt.Errorf("text: draw glyph U+%04X: %w", r, err)
 			}

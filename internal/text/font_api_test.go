@@ -72,6 +72,49 @@ func TestFontStackMetrics(t *testing.T) {
 	}
 }
 
+func TestFontStackLookupMetadataOrderAndFallback(t *testing.T) {
+	primary := &countingMetadataFont{}
+	primary.glyphs[0] = struct {
+		r rune
+		g Glyph
+	}{'p', Glyph{AdvanceX: 1, BearingX: 10}}
+	primary.glyphs[1] = struct {
+		r rune
+		g Glyph
+	}{'s', Glyph{AdvanceX: 1, BearingX: 11}}
+	fallback := &countingMetadataFont{}
+	fallback.glyphs[0] = struct {
+		r rune
+		g Glyph
+	}{'f', Glyph{AdvanceX: 1, BearingX: 20}}
+	fallback.glyphs[1] = struct {
+		r rune
+		g Glyph
+	}{'s', Glyph{AdvanceX: 1, BearingX: 21}}
+	stack := FontStack{Primary: primary, Fallbacks: [3]Font{fallback}}
+
+	if glyph, ok := stack.LookupMetadata('p'); !ok || glyph.BearingX != 10 || primary.metadataCalls != 1 || fallback.metadataCalls != 0 {
+		t.Fatalf("primary metadata=%+v ok=%v calls=%d/%d", glyph, ok, primary.metadataCalls, fallback.metadataCalls)
+	}
+	if glyph, ok := stack.LookupMetadata('f'); !ok || glyph.BearingX != 20 || primary.metadataCalls != 2 || fallback.metadataCalls != 1 {
+		t.Fatalf("fallback metadata=%+v ok=%v calls=%d/%d", glyph, ok, primary.metadataCalls, fallback.metadataCalls)
+	}
+	if glyph, ok := stack.LookupMetadata('s'); !ok || glyph.BearingX != 11 {
+		t.Fatalf("shared metadata=%+v ok=%v", glyph, ok)
+	}
+	if glyph, ok := stack.Lookup('s'); !ok || glyph.BearingX != 11 {
+		t.Fatalf("shared bitmap=%+v ok=%v", glyph, ok)
+	}
+	if _, ok := stack.LookupMetadata('x'); ok {
+		t.Fatal("missing metadata found")
+	}
+
+	legacy := markerFont('l', 30, FontMetrics{})
+	if glyph, ok := LookupMetadata(legacy, 'l'); !ok || glyph.BearingX != 30 {
+		t.Fatalf("legacy fallback metadata=%+v ok=%v", glyph, ok)
+	}
+}
+
 func TestStyleSetLookup(t *testing.T) {
 	first := Style{Font: markerFont('x', 1, FontMetrics{}), Foreground: display.ColorWhite}
 	middle := Style{Font: markerFont('x', 2, FontMetrics{}), Background: display.ColorBlack}

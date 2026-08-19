@@ -189,7 +189,7 @@ func (v *Viewport) SetText(value string) error {
 	for i := range spans {
 		for _, r := range spans[i].Value {
 			if r != '\n' {
-				if glyph, ok := spans[i].Font.Lookup(r); ok {
+				if glyph, ok := text.LookupMetadata(spans[i].Font, r); ok {
 					width := glyph.Width
 					if spans[i].Bold && width < math.MaxInt16 {
 						width++

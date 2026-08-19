@@ -35,6 +35,12 @@ type Glyph struct {
 	Bitmap                       string
 }
 
+// GlyphMetadata is glyph placement information without a bitmap.
+type GlyphMetadata struct {
+	Width, Height                uint8
+	AdvanceX, BearingX, BearingY int16
+}
+
 type block struct {
 	offset, storedLen, rawLen uint32
 	flags                     uint32
@@ -309,9 +315,9 @@ func (f *Font) expand(index uint32, cache bool) (string, error) {
 	return raw, nil
 }
 
-func (f *Font) Lookup(r rune) (Glyph, bool) {
+func (f *Font) glyphEntry(r rune) (int, bool) {
 	if f == nil || r < 0 || r > 0x10ffff || r >= 0xd800 && r <= 0xdfff {
-		return Glyph{}, false
+		return 0, false
 	}
 	lo, hi := uint32(0), f.header.GlyphCount
 	for lo < hi {
@@ -324,13 +330,32 @@ func (f *Font) Lookup(r rune) (Glyph, bool) {
 		}
 	}
 	if lo == f.header.GlyphCount {
-		return Glyph{}, false
+		return 0, false
 	}
 	p := int(f.glyphTable + lo*GlyphEntrySize)
-	if u32(f.data, p) != uint32(r) {
+	return p, u32(f.data, p) == uint32(r)
+}
+
+// LookupMetadata returns placement information without expanding or accessing
+// the block cache.
+func (f *Font) LookupMetadata(r rune) (GlyphMetadata, bool) {
+	p, ok := f.glyphEntry(r)
+	if !ok {
+		return GlyphMetadata{}, false
+	}
+	return GlyphMetadata{
+		Width: uint8(f.data[p+4]), Height: uint8(f.data[p+5]),
+		AdvanceX: int16(u16(f.data, p+6)), BearingX: int16(u16(f.data, p+8)), BearingY: int16(u16(f.data, p+10)),
+	}, true
+}
+
+func (f *Font) Lookup(r rune) (Glyph, bool) {
+	p, ok := f.glyphEntry(r)
+	if !ok {
 		return Glyph{}, false
 	}
-	raw, err := f.expand(lo/uint32(f.header.GlyphsPerBlock), true)
+	index := uint32((p - int(f.glyphTable)) / GlyphEntrySize)
+	raw, err := f.expand(index/uint32(f.header.GlyphsPerBlock), true)
 	if err != nil {
 		return Glyph{}, false
 	}

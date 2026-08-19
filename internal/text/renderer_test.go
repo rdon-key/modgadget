@@ -29,6 +29,129 @@ func (b *fakeBackend) WritePixels(data []byte) error {
 }
 func (b *fakeBackend) EndRect() error { b.endCalls++; return b.endErr }
 
+type discardBackend struct {
+	width, height                    int16
+	beginCalls, writeCalls, endCalls int
+}
+
+func (b *discardBackend) Size() (int16, int16) { return b.width, b.height }
+func (b *discardBackend) BeginRect(_, _, _, _ int16) error {
+	b.beginCalls++
+	return nil
+}
+func (b *discardBackend) WritePixels([]byte) error { b.writeCalls++; return nil }
+func (b *discardBackend) EndRect() error           { b.endCalls++; return nil }
+
+func metadataTestFont(glyph Glyph) *countingMetadataFont {
+	font := &countingMetadataFont{}
+	font.glyphs[0] = struct {
+		r rune
+		g Glyph
+	}{r: 'a', g: glyph}
+	return font
+}
+
+func TestDrawStringCullsGlyphsInTwoDimensions(t *testing.T) {
+	tests := []struct {
+		name          string
+		pen, baseline int16
+		glyph         Glyph
+		wantBitmap    int
+	}{
+		{"fully left", -2, 1, Glyph{Width: 2, Height: 2, AdvanceX: 3, Bitmap: "\x80\x80"}, 0},
+		{"fully right", 10, 1, Glyph{Width: 2, Height: 2, AdvanceX: 3, Bitmap: "\x80\x80"}, 0},
+		{"fully above", 1, 0, Glyph{Width: 2, Height: 2, AdvanceX: 3, BearingY: 2, Bitmap: "\x80\x80"}, 0},
+		{"fully below", 1, 10, Glyph{Width: 2, Height: 2, AdvanceX: 3, Bitmap: "\x80\x80"}, 0},
+		{"partly left", -1, 1, Glyph{Width: 2, Height: 2, AdvanceX: 3, Bitmap: "\x80\x80"}, 1},
+		{"partly right", 9, 1, Glyph{Width: 2, Height: 2, AdvanceX: 3, Bitmap: "\x80\x80"}, 1},
+		{"partly above", 1, 0, Glyph{Width: 2, Height: 2, AdvanceX: 3, BearingY: 1, Bitmap: "\x80\x80"}, 1},
+		{"partly below", 1, 9, Glyph{Width: 2, Height: 2, AdvanceX: 3, Bitmap: "\x80\x80"}, 1},
+		{"fully visible with negative bearings", 3, 3, Glyph{Width: 2, Height: 2, AdvanceX: -1, BearingX: -2, BearingY: -2, Bitmap: "\x80\x80"}, 1},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			font := metadataTestFont(tt.glyph)
+			backend := &discardBackend{width: 10, height: 10}
+			pen, err := DrawString(backend, font, tt.pen, tt.baseline, "a", 1, 0, make([]byte, 4))
+			if err != nil || pen != tt.pen+tt.glyph.AdvanceX {
+				t.Fatalf("pen=%d err=%v", pen, err)
+			}
+			if font.metadataCalls != 1 || font.bitmapCalls != tt.wantBitmap || backend.beginCalls != tt.wantBitmap {
+				t.Fatalf("metadata=%d bitmap=%d begin=%d", font.metadataCalls, font.bitmapCalls, backend.beginCalls)
+			}
+		})
+	}
+}
+
+func TestDrawStringBoldCullingAndEmptyGlyphs(t *testing.T) {
+	bold := metadataTestFont(Glyph{Width: 1, Height: 1, AdvanceX: 2, Bitmap: "\x80"})
+	backend := &discardBackend{width: 10, height: 10}
+	pen, err := drawStyledFontValue(backend, bold, -1, 0, "a", 1, 0, true, make([]byte, 4))
+	if err != nil || pen != 1 || bold.metadataCalls != 1 || bold.bitmapCalls != 1 {
+		t.Fatalf("bold pen=%d metadata=%d bitmap=%d err=%v", pen, bold.metadataCalls, bold.bitmapCalls, err)
+	}
+
+	empty := &countingMetadataFont{}
+	empty.glyphs[0] = struct {
+		r rune
+		g Glyph
+	}{'a', Glyph{Height: 2, AdvanceX: 3}}
+	empty.glyphs[1] = struct {
+		r rune
+		g Glyph
+	}{'b', Glyph{Width: 2, AdvanceX: -1}}
+	pen, err = DrawString(backend, empty, 0, 0, "ab", 1, 0, nil)
+	if err != nil || pen != 2 || empty.metadataCalls != 2 || empty.bitmapCalls != 0 {
+		t.Fatalf("empty pen=%d metadata=%d bitmap=%d err=%v", pen, empty.metadataCalls, empty.bitmapCalls, err)
+	}
+}
+
+func TestDrawStringNegativeAdvanceCanReturnToView(t *testing.T) {
+	font := &countingMetadataFont{}
+	font.glyphs[0] = struct {
+		r rune
+		g Glyph
+	}{'a', Glyph{Width: 1, Height: 1, AdvanceX: -10, Bitmap: "\x80"}}
+	font.glyphs[1] = struct {
+		r rune
+		g Glyph
+	}{'b', Glyph{Width: 1, Height: 1, AdvanceX: 1, Bitmap: "\x80"}}
+	backend := &discardBackend{width: 10, height: 10}
+	pen, err := DrawString(backend, font, 10, 0, "ab", 1, 0, make([]byte, 2))
+	if err != nil || pen != 1 || font.metadataCalls != 2 || font.bitmapCalls != 1 {
+		t.Fatalf("pen=%d metadata=%d bitmap=%d err=%v", pen, font.metadataCalls, font.bitmapCalls, err)
+	}
+}
+
+func TestDrawLinesCullsAboveAndBelowViewport(t *testing.T) {
+	font := metadataTestFont(Glyph{Width: 1, Height: 1, AdvanceX: 1, Bitmap: "\x80"})
+	font.metrics = FontMetrics{Ascent: 5}
+	lines := []Line{
+		{Spans: []Span{{Font: font, Value: "a"}}},
+		{Spans: []Span{{Font: font, Value: "a"}}},
+		{Spans: []Span{{Font: font, Value: "a"}}},
+		{Spans: []Span{{Font: font, Value: "a"}}},
+	}
+	backend := &discardBackend{width: 10, height: 10}
+	baseline, err := DrawLines(backend, lines, 0, -2, make([]byte, 2))
+	if err != nil || baseline != 18 || font.metadataCalls != 4 || font.bitmapCalls != 2 {
+		t.Fatalf("baseline=%d metadata=%d bitmap=%d err=%v", baseline, font.metadataCalls, font.bitmapCalls, err)
+	}
+}
+
+func TestMetadataDrawSteadyAllocations(t *testing.T) {
+	font := metadataTestFont(Glyph{Width: 1, Height: 1, AdvanceX: 1, Bitmap: "\x80"})
+	backend := &discardBackend{width: 10, height: 10}
+	scratch := make([]byte, 2)
+	if allocations := testing.AllocsPerRun(100, func() {
+		if _, err := DrawString(backend, font, 0, 0, "a", 1, 0, scratch); err != nil {
+			panic(err)
+		}
+	}); allocations != 0 {
+		t.Fatalf("draw allocations=%v", allocations)
+	}
+}
+
 func newFace(glyphs []testGlyphInfo, bitmap string) Font {
 	return spanFace(FontMetrics{}, glyphs, bitmap)
 }

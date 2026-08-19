@@ -22,7 +22,7 @@ type Measurement struct {
 }
 
 type glyphPosition struct {
-	glyph Glyph
+	glyph GlyphMetadata
 	x     int16
 	y     int16
 	nextX int16
@@ -88,7 +88,7 @@ func measureStyledValueProgress(measurement Measurement, face Font, value string
 }
 
 func positionGlyph(face Font, r rune, penX, baselineY int16) (glyphPosition, error) {
-	glyph, ok := face.Lookup(r)
+	glyph, ok := LookupMetadata(face, r)
 	if !ok {
 		return glyphPosition{}, fmt.Errorf("text: glyph U+%04X is missing or invalid", r)
 	}
