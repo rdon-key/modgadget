@@ -153,6 +153,48 @@ func TestBrokenDeflateIsDeferredUntilLookup(t *testing.T) {
 	}
 }
 
+func replaceLastDeflate(t *testing.T, raw string) string {
+	t.Helper()
+	d := []byte(makeFont(t, true))
+	var compressed bytes.Buffer
+	w, err := flate.NewWriter(&compressed, flate.BestCompression)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := w.Write([]byte(raw)); err != nil {
+		t.Fatal(err)
+	}
+	if err := w.Close(); err != nil {
+		t.Fatal(err)
+	}
+	entry := 64 + 3*16 + 16
+	offset := int(binary.LittleEndian.Uint32(d[entry:]))
+	d = append(d[:offset], compressed.Bytes()...)
+	binary.LittleEndian.PutUint32(d[entry+4:], uint32(compressed.Len()))
+	binary.LittleEndian.PutUint32(d[20:], uint32(len(d)))
+	return string(d)
+}
+
+func TestDeflateOutputLength(t *testing.T) {
+	for _, tt := range []struct{ name, raw, errorText string }{
+		{"short", strings.Repeat("c", 15), "want 16"},
+		{"long", strings.Repeat("c", 17), "exceeds raw length"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			f, err := Open(replaceLastDeflate(t, tt.raw))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, ok := f.Lookup(rune(0x3042)); ok {
+				t.Fatal("Lookup accepted invalid output length")
+			}
+			if err := f.ValidateAll(); err == nil || !strings.Contains(err.Error(), tt.errorText) {
+				t.Fatalf("ValidateAll err=%v", err)
+			}
+		})
+	}
+}
+
 func TestOpenDoesNotExpandDeflate(t *testing.T) {
 	f, err := Open(makeFont(t, true))
 	if err != nil {

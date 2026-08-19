@@ -150,19 +150,44 @@ func (f *Font) validateBlock(index uint32) error {
 		return nil
 	}
 	stored := f.data[int(b.offset):int(b.offset+b.storedLen)]
-	r := flate.NewReader(strings.NewReader(stored))
-	n, err := io.Copy(io.Discard, io.LimitReader(r, int64(b.rawLen)+1))
-	closeErr := r.Close()
-	if err != nil {
+	if err := inflate(stored, b.rawLen, nil); err != nil {
 		return fmt.Errorf("mgz: inflate block %d: %w", index, err)
 	}
-	if closeErr != nil {
-		return fmt.Errorf("mgz: close block %d: %w", index, closeErr)
-	}
-	if n != int64(b.rawLen) {
-		return fmt.Errorf("mgz: block %d expands to %d bytes, want %d", index, n, b.rawLen)
-	}
 	return nil
+}
+
+// inflate reads a raw DEFLATE stream using only a small fixed copy buffer.
+// When output is nil it validates without retaining the expanded bytes.
+func inflate(stored string, rawLen uint32, output *strings.Builder) error {
+	r := flate.NewReader(strings.NewReader(stored))
+	var buffer [256]byte
+	var total uint32
+	for {
+		n, err := r.Read(buffer[:])
+		if n > 0 {
+			if uint64(total)+uint64(n) > uint64(rawLen) {
+				_ = r.Close()
+				return fmt.Errorf("output exceeds raw length %d", rawLen)
+			}
+			total += uint32(n)
+			if output != nil {
+				_, _ = output.Write(buffer[:n])
+			}
+		}
+		if err == io.EOF {
+			if closeErr := r.Close(); closeErr != nil {
+				return closeErr
+			}
+			if total != rawLen {
+				return fmt.Errorf("output is %d bytes, want %d", total, rawLen)
+			}
+			return nil
+		}
+		if err != nil {
+			_ = r.Close()
+			return err
+		}
+	}
 }
 
 func MustOpen(data string) *Font {
@@ -242,16 +267,10 @@ func (f *Font) expand(index uint32, cache bool) (string, error) {
 	stored := f.data[int(b.offset):int(b.offset+b.storedLen)]
 	raw := stored
 	if b.flags == blockDeflated {
-		r := flate.NewReader(strings.NewReader(stored))
 		var output strings.Builder
 		output.Grow(int(b.rawLen))
-		_, err := io.Copy(&output, io.LimitReader(r, int64(b.rawLen)+1))
-		closeErr := r.Close()
-		if err != nil {
+		if err := inflate(stored, b.rawLen, &output); err != nil {
 			return "", fmt.Errorf("mgz: inflate block %d: %w", index, err)
-		}
-		if closeErr != nil {
-			return "", fmt.Errorf("mgz: close block %d: %w", index, closeErr)
 		}
 		raw = output.String()
 	}
