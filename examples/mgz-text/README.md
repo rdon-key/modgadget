@@ -1,6 +1,5 @@
 # mgz-text
-
-Embeds the experimental `efont24-full.mgz` font and renders English,
+Uses the MGZ-backed `efont24.Font` package and renders English,
 Japanese, Chinese, and Korean text on Cardputer ADV.
 
 ```sh

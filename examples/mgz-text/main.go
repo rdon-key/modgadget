@@ -3,15 +3,12 @@
 package main
 
 import (
-	_ "embed"
 	"time"
-
+	"github.com/rdon-key/modgadget-fonts/efont24"
 	"github.com/rdon-key/modgadget"
 	board "github.com/rdon-key/modgadget/device/cardputeradv"
 )
 
-//go:embed efont24-full.mgz
-var fontData string
 
 func main() {
 	time.Sleep(3 * time.Second)
@@ -19,7 +16,7 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	font := modgadget.MustOpenMGZ(fontData)
+	font := efont24.Font
 	gadget := modgadget.New(panel, modgadget.WithStyles(modgadget.StyleSet{Default: modgadget.Style{
 		Font: font, Foreground: modgadget.ColorWhite, Background: modgadget.ColorBlack,
 	}}))
