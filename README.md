@@ -216,7 +216,7 @@ For complete TinyGo setup, firmware build, and flashing instructions, see [Rdon 
 | -------------------------------------------------------------------------- | ---------------------------------------------------- |
 | [rdon-type100](https://github.com/rdon-key/rdon-type100)                   | Complete multilingual Cardputer ADV application      |
 | [modgadget](https://github.com/rdon-key/modgadget)                         | UI, display, input, and device toolkit               |
-| [modgadget-fonts](https://github.com/rdon-key/modgadget-fonts)             | Importable MGF bitmap-font packages                  |
+| [modgadget-fonts](https://github.com/rdon-key/modgadget-fonts)             | Importable MGZ bitmap-font packages                  |
 | [modgadget-examples](https://github.com/rdon-key/modgadget-examples)       | Standalone ModGadget examples                        |
 | [modgadget-font-assets](https://github.com/rdon-key/modgadget-font-assets) | Font sources, provenance, generation, and validation |
 
