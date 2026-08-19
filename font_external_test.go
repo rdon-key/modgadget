@@ -57,6 +57,18 @@ func TestOpenMGFAndMustOpenMGF(t *testing.T) {
 	modgadget.MustOpenMGF("invalid")
 }
 
+func TestOpenMGZRejectsInvalidData(t *testing.T) {
+	if font, err := modgadget.OpenMGZ("invalid"); err == nil || font.Valid() {
+		t.Fatalf("font=%v err=%v", font.Valid(), err)
+	}
+	defer func() {
+		if recover() == nil {
+			t.Fatal("MustOpenMGZ did not panic")
+		}
+	}()
+	modgadget.MustOpenMGZ("invalid")
+}
+
 func TestStandardFonts(t *testing.T) {
 	tests := []struct {
 		name string

@@ -5,6 +5,7 @@ import (
 
 	displaypkg "github.com/rdon-key/modgadget/internal/display"
 	"github.com/rdon-key/modgadget/internal/mgf"
+	"github.com/rdon-key/modgadget/internal/mgz"
 	"github.com/rdon-key/modgadget/internal/text"
 	"github.com/rdon-key/modgadget/internal/text/markup"
 )
@@ -62,6 +63,38 @@ func MustOpenMGF(data string) Font {
 		panic(err)
 	}
 	return font
+}
+
+// OpenMGZ validates experimental MGZ1 data and returns an opaque font.
+func OpenMGZ(data string) (Font, error) {
+	source, err := mgz.Open(data)
+	if err != nil {
+		return Font{}, fmt.Errorf("modgadget: open MGZ: %w", err)
+	}
+	return Font{impl: mgzFont{source}}, nil
+}
+
+// MustOpenMGZ is like OpenMGZ but panics if data is invalid.
+func MustOpenMGZ(data string) Font {
+	font, err := OpenMGZ(data)
+	if err != nil {
+		panic(err)
+	}
+	return font
+}
+
+type mgzFont struct{ source *mgz.Font }
+
+func (font mgzFont) Lookup(r rune) (text.Glyph, bool) {
+	g, ok := font.source.Lookup(r)
+	if !ok {
+		return text.Glyph{}, false
+	}
+	return text.Glyph{Width: int16(g.Width), Height: int16(g.Height), AdvanceX: g.AdvanceX, BearingX: g.BearingX, BearingY: g.BearingY, Bitmap: g.Bitmap}, true
+}
+func (font mgzFont) Metrics() text.FontMetrics {
+	h := font.source.Header()
+	return text.FontMetrics{Ascent: int16(h.Ascent), Descent: int16(h.Descent), LineGap: int16(h.LineGap)}
 }
 
 type mgfFont struct{ source mgf.Font }
