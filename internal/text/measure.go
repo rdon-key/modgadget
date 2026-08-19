@@ -92,6 +92,10 @@ func positionGlyph(face Font, r rune, penX, baselineY int16) (glyphPosition, err
 	if !ok {
 		return glyphPosition{}, fmt.Errorf("text: glyph U+%04X is missing or invalid", r)
 	}
+	return positionGlyphMetadata(glyph, r, penX, baselineY)
+}
+
+func positionGlyphMetadata(glyph GlyphMetadata, r rune, penX, baselineY int16) (glyphPosition, error) {
 	x := int32(penX) + int32(glyph.BearingX)
 	if x < math.MinInt16 || x > math.MaxInt16 {
 		return glyphPosition{}, fmt.Errorf("text: glyph U+%04X X coordinate is outside int16", r)

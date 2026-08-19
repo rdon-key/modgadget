@@ -142,12 +142,20 @@ func (stack fontStack) Lookup(r rune) (text.Glyph, bool) {
 }
 
 func (stack fontStack) LookupMetadata(r rune) (text.GlyphMetadata, bool) {
+	resolved, ok := stack.ResolveGlyph(r)
+	if !ok {
+		return text.GlyphMetadata{}, false
+	}
+	return resolved.Metadata(), true
+}
+
+func (stack fontStack) ResolveGlyph(r rune) (text.ResolvedGlyph, bool) {
 	for i := uint8(0); i < stack.count; i++ {
-		if glyph, ok := text.LookupMetadata(stack.fonts[i], r); ok {
+		if glyph, ok := text.ResolveGlyph(stack.fonts[i], r); ok {
 			return glyph, true
 		}
 	}
-	return text.GlyphMetadata{}, false
+	return text.ResolvedGlyph{}, false
 }
 
 func (stack fontStack) Metrics() text.FontMetrics {

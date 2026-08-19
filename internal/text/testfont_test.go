@@ -88,6 +88,40 @@ func (font *countingMetadataFont) Lookup(r rune) (Glyph, bool) {
 
 func (font *countingMetadataFont) Metrics() FontMetrics { return font.metrics }
 
+type splitLookupFont struct {
+	metadata      GlyphMetadata
+	glyph         Glyph
+	metadataOK    bool
+	bitmapOK      bool
+	metadataCalls int
+	bitmapCalls   int
+}
+
+func (font *splitLookupFont) LookupMetadata(r rune) (GlyphMetadata, bool) {
+	font.metadataCalls++
+	return font.metadata, font.metadataOK
+}
+
+func (font *splitLookupFont) Lookup(r rune) (Glyph, bool) {
+	font.bitmapCalls++
+	return font.glyph, font.bitmapOK
+}
+
+func (*splitLookupFont) Metrics() FontMetrics { return FontMetrics{} }
+
+type countingLegacyFont struct {
+	glyph Glyph
+	ok    bool
+	calls int
+}
+
+func (font *countingLegacyFont) Lookup(r rune) (Glyph, bool) {
+	font.calls++
+	return font.glyph, font.ok
+}
+
+func (*countingLegacyFont) Metrics() FontMetrics { return FontMetrics{} }
+
 func (font *fixedFont) Lookup(r rune) (Glyph, bool) {
 	for index := range font.glyphs {
 		if font.glyphs[index].r == r {

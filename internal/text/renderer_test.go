@@ -150,6 +150,149 @@ func TestMetadataDrawSteadyAllocations(t *testing.T) {
 	}); allocations != 0 {
 		t.Fatalf("draw allocations=%v", allocations)
 	}
+	if allocations := testing.AllocsPerRun(100, func() {
+		if _, err := DrawString(backend, font, 10, 0, "a", 1, 0, scratch); err != nil {
+			panic(err)
+		}
+	}); allocations != 0 {
+		t.Fatalf("invisible draw allocations=%v", allocations)
+	}
+}
+
+func TestDrawResolvedFontStackKeepsSelectedLeaf(t *testing.T) {
+	primary := &splitLookupFont{
+		metadata:   GlyphMetadata{Width: 1, Height: 1, AdvanceX: 2},
+		glyph:      Glyph{Width: 1, Height: 1, AdvanceX: 2, Bitmap: "\x80"},
+		metadataOK: true, bitmapOK: true,
+	}
+	fallback := &splitLookupFont{
+		metadata:   GlyphMetadata{Width: 2, Height: 1, AdvanceX: 3},
+		glyph:      Glyph{Width: 2, Height: 1, AdvanceX: 3, Bitmap: "\x40"},
+		metadataOK: true, bitmapOK: true,
+	}
+	backend := &discardBackend{width: 10, height: 10}
+	stack := FontStack{Primary: primary, Fallbacks: [3]Font{fallback}}
+	if _, err := DrawString(backend, stack, 0, 0, "a", 1, 0, make([]byte, 4)); err != nil {
+		t.Fatal(err)
+	}
+	if primary.metadataCalls != 1 || primary.bitmapCalls != 1 || fallback.metadataCalls != 0 || fallback.bitmapCalls != 0 {
+		t.Fatalf("primary=%d/%d fallback=%d/%d", primary.metadataCalls, primary.bitmapCalls, fallback.metadataCalls, fallback.bitmapCalls)
+	}
+
+	primary.metadataOK = false
+	primary.metadataCalls, primary.bitmapCalls = 0, 0
+	fallback.metadataCalls, fallback.bitmapCalls = 0, 0
+	if _, err := DrawString(backend, stack, 0, 0, "a", 1, 0, make([]byte, 4)); err != nil {
+		t.Fatal(err)
+	}
+	if primary.metadataCalls != 1 || primary.bitmapCalls != 0 || fallback.metadataCalls != 1 || fallback.bitmapCalls != 1 {
+		t.Fatalf("fallback selection primary=%d/%d fallback=%d/%d", primary.metadataCalls, primary.bitmapCalls, fallback.metadataCalls, fallback.bitmapCalls)
+	}
+
+	primary.metadataOK = true
+	primary.metadataCalls, primary.bitmapCalls = 0, 0
+	fallback.metadataCalls, fallback.bitmapCalls = 0, 0
+	nested := FontStack{Primary: FontStack{Primary: primary, Fallbacks: [3]Font{fallback}}}
+	if _, err := DrawString(backend, nested, 0, 0, "a", 1, 0, make([]byte, 4)); err != nil {
+		t.Fatal(err)
+	}
+	if primary.metadataCalls != 1 || primary.bitmapCalls != 1 || fallback.metadataCalls != 0 || fallback.bitmapCalls != 0 {
+		t.Fatalf("nested primary=%d/%d fallback=%d/%d", primary.metadataCalls, primary.bitmapCalls, fallback.metadataCalls, fallback.bitmapCalls)
+	}
+}
+
+func TestDrawResolvedFontStackDoesNotFallbackAfterBitmapFailure(t *testing.T) {
+	primary := &splitLookupFont{
+		metadata:   GlyphMetadata{Width: 1, Height: 1, AdvanceX: 2},
+		metadataOK: true,
+	}
+	fallback := &splitLookupFont{
+		metadata:   GlyphMetadata{Width: 3, Height: 2, AdvanceX: 4},
+		glyph:      Glyph{Width: 3, Height: 2, AdvanceX: 4, Bitmap: "\xe0\xe0"},
+		metadataOK: true, bitmapOK: true,
+	}
+	backend := &discardBackend{width: 10, height: 10}
+	stack := FontStack{Primary: primary, Fallbacks: [3]Font{fallback}}
+	if _, err := DrawString(backend, stack, 0, 0, "a", 1, 0, make([]byte, 6)); err == nil {
+		t.Fatal("bitmap failure succeeded")
+	}
+	if primary.metadataCalls != 1 || primary.bitmapCalls != 1 || fallback.metadataCalls != 0 || fallback.bitmapCalls != 0 {
+		t.Fatalf("primary=%d/%d fallback=%d/%d", primary.metadataCalls, primary.bitmapCalls, fallback.metadataCalls, fallback.bitmapCalls)
+	}
+	if backend.beginCalls != 0 || backend.writeCalls != 0 {
+		t.Fatalf("begin=%d writes=%d", backend.beginCalls, backend.writeCalls)
+	}
+}
+
+func TestDrawLegacyFontReusesResolvedGlyph(t *testing.T) {
+	for _, tt := range []struct {
+		name string
+		font Font
+		leaf *countingLegacyFont
+		pen  int16
+	}{
+		{"visible", nil, &countingLegacyFont{glyph: Glyph{Width: 1, Height: 1, AdvanceX: 2, Bitmap: "\x80"}, ok: true}, 0},
+		{"invisible", nil, &countingLegacyFont{glyph: Glyph{Width: 1, Height: 1, AdvanceX: 2, Bitmap: "\x80"}, ok: true}, 10},
+		{"stack primary", nil, &countingLegacyFont{glyph: Glyph{Width: 1, Height: 1, AdvanceX: 2, Bitmap: "\x80"}, ok: true}, 0},
+		{"stack fallback", nil, &countingLegacyFont{glyph: Glyph{Width: 1, Height: 1, AdvanceX: 2, Bitmap: "\x80"}, ok: true}, 0},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			switch tt.name {
+			case "stack primary":
+				tt.font = FontStack{Primary: tt.leaf}
+			case "stack fallback":
+				tt.font = FontStack{Primary: &countingLegacyFont{}, Fallbacks: [3]Font{tt.leaf}}
+			default:
+				tt.font = tt.leaf
+			}
+			backend := &discardBackend{width: 10, height: 10}
+			if _, err := DrawString(backend, tt.font, tt.pen, 0, "a", 1, 0, make([]byte, 2)); err != nil {
+				t.Fatal(err)
+			}
+			if tt.leaf.calls != 1 {
+				t.Fatalf("Lookup calls=%d", tt.leaf.calls)
+			}
+		})
+	}
+
+	legacy := &countingLegacyFont{glyph: Glyph{Width: 1, Height: 1, AdvanceX: 1, Bitmap: "\x80"}, ok: true}
+	backend := &discardBackend{width: 10, height: 10}
+	scratch := make([]byte, 2)
+	if allocations := testing.AllocsPerRun(100, func() {
+		if _, err := DrawString(backend, legacy, 0, 0, "a", 1, 0, scratch); err != nil {
+			panic(err)
+		}
+	}); allocations != 0 {
+		t.Fatalf("legacy draw allocations=%v", allocations)
+	}
+}
+
+func TestDrawRejectsMetadataMismatchAndShortBitmapBeforeTransfer(t *testing.T) {
+	validMetadata := GlyphMetadata{Width: 2, Height: 2, AdvanceX: 3, BearingX: 1, BearingY: 1}
+	validGlyph := Glyph{Width: 2, Height: 2, AdvanceX: 3, BearingX: 1, BearingY: 1, Bitmap: "\x80\x80"}
+	tests := []struct {
+		name  string
+		glyph Glyph
+	}{
+		{"width", Glyph{Width: 1, Height: 2, AdvanceX: 3, BearingX: 1, BearingY: 1, Bitmap: "\x80\x80"}},
+		{"height", Glyph{Width: 2, Height: 1, AdvanceX: 3, BearingX: 1, BearingY: 1, Bitmap: "\x80\x80"}},
+		{"advance", Glyph{Width: 2, Height: 2, AdvanceX: 4, BearingX: 1, BearingY: 1, Bitmap: "\x80\x80"}},
+		{"bearing X", Glyph{Width: 2, Height: 2, AdvanceX: 3, BearingX: 2, BearingY: 1, Bitmap: "\x80\x80"}},
+		{"bearing Y", Glyph{Width: 2, Height: 2, AdvanceX: 3, BearingX: 1, BearingY: 2, Bitmap: "\x80\x80"}},
+		{"short bitmap", func() Glyph { glyph := validGlyph; glyph.Bitmap = "\x80"; return glyph }()},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			font := &splitLookupFont{metadata: validMetadata, glyph: tt.glyph, metadataOK: true, bitmapOK: true}
+			backend := &discardBackend{width: 10, height: 10}
+			if _, err := DrawString(backend, font, 0, 1, "a", 1, 0, make([]byte, 4)); err == nil {
+				t.Fatal("invalid glyph was drawn")
+			}
+			if backend.beginCalls != 0 || backend.writeCalls != 0 {
+				t.Fatalf("begin=%d writes=%d", backend.beginCalls, backend.writeCalls)
+			}
+		})
+	}
 }
 
 func newFace(glyphs []testGlyphInfo, bitmap string) Font {

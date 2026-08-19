@@ -1,6 +1,8 @@
 package modgadget
 
 import (
+	"bytes"
+	"compress/flate"
 	"encoding/binary"
 	"errors"
 	"testing"
@@ -141,11 +143,11 @@ func TestViewportMetadataMeasurementAndVisibleBitmapLookups(t *testing.T) {
 	}
 }
 
-func brokenSingleGlyphMGZ() string {
+func singleGlyphMGZ(stored string) string {
 	const glyphTable = mgz.HeaderSize
 	const blockTable = glyphTable + mgz.GlyphEntrySize
 	const blockData = blockTable + mgz.BlockEntrySize
-	d := make([]byte, blockData+1)
+	d := make([]byte, blockData+len(stored))
 	copy(d, "MGZ1")
 	le := binary.LittleEndian
 	le.PutUint16(d[4:], mgz.Version1)
@@ -165,31 +167,80 @@ func brokenSingleGlyphMGZ() string {
 	le.PutUint16(d[glyphTable+10:], 1)
 	le.PutUint16(d[glyphTable+12:], 1)
 	le.PutUint32(d[blockTable:], blockData)
-	le.PutUint32(d[blockTable+4:], 1)
+	le.PutUint32(d[blockTable+4:], uint32(len(stored)))
 	le.PutUint32(d[blockTable+8:], 1)
 	le.PutUint32(d[blockTable+12:], 1)
-	d[blockData] = 0 // Invalid raw DEFLATE, deliberately deferred by Open.
+	copy(d[blockData:], stored)
 	return string(d)
+}
+
+func brokenSingleGlyphMGZ() string { return singleGlyphMGZ("\x00") }
+
+func validSingleGlyphMGZ(t *testing.T) string {
+	t.Helper()
+	var compressed bytes.Buffer
+	w, err := flate.NewWriter(&compressed, flate.BestCompression)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := w.Write([]byte{'\x80'}); err != nil {
+		t.Fatal(err)
+	}
+	if err := w.Close(); err != nil {
+		t.Fatal(err)
+	}
+	return singleGlyphMGZ(compressed.String())
 }
 
 func TestViewportFontStackDoesNotExpandInvisibleMGZGlyph(t *testing.T) {
 	source := mgz.MustOpen(brokenSingleGlyphMGZ())
-	stack, err := NewFontStack(Font{impl: mgzFont{source: source}})
+	fallback := &countingViewportFont{}
+	stack, err := NewFontStack(Font{impl: mgzFont{source: source}}, Font{impl: fallback})
 	if err != nil {
 		t.Fatal(err)
 	}
-	styles := StyleSet{Default: Style{Font: stack, Foreground: ColorWhite}}
-	v := New(&allocationDisplay{}, WithStyles(styles)).Viewport(Bounds(0, 0, 5, 10))
-	if err := v.SetText("A"); err != nil {
+	invisible := &testDisplay{width: 5, height: 10}
+	if _, err := text.DrawString(invisible, stack.impl, -10, 1, "A", display.ColorWhite, 0, make([]byte, 20)); err != nil {
+		t.Fatalf("invisible draw expanded primary MGZ: %v", err)
+	}
+	if fallback.metadataCalls != 0 || fallback.bitmapCalls != 0 || len(invisible.begins) != 0 || invisible.writes != 0 {
+		t.Fatalf("invisible fallback=%d/%d begin=%d writes=%d", fallback.metadataCalls, fallback.bitmapCalls, len(invisible.begins), invisible.writes)
+	}
+
+	visible := &testDisplay{width: 5, height: 10}
+	if _, err := text.DrawString(visible, stack.impl, 0, 1, "A", display.ColorWhite, 0, make([]byte, 20)); err == nil {
+		t.Fatal("visible broken primary MGZ used fallback bitmap")
+	}
+	if fallback.metadataCalls != 0 || fallback.bitmapCalls != 0 || len(visible.begins) != 0 || visible.writes != 0 {
+		t.Fatalf("visible fallback=%d/%d begin=%d writes=%d", fallback.metadataCalls, fallback.bitmapCalls, len(visible.begins), visible.writes)
+	}
+}
+
+func TestMGZCacheHitDrawingAllocations(t *testing.T) {
+	source := mgz.MustOpen(validSingleGlyphMGZ(t))
+	if _, ok := source.Lookup('A'); !ok {
+		t.Fatal("failed to warm MGZ cache")
+	}
+	font := mgzFont{source: source}
+	stack, err := NewFontStack(Font{impl: font})
+	if err != nil {
 		t.Fatal(err)
 	}
-	v.SetHorizontalScroll(ScrollSpeed(1))
-	v.ScrollTo(10)
-	if err := v.owner.Render(); err != nil {
-		t.Fatalf("invisible MGZ glyph was expanded: %v", err)
+	backend := &allocationDisplay{}
+	scratch := make([]byte, 16)
+	if allocations := testing.AllocsPerRun(100, func() {
+		if _, err := text.DrawString(backend, font, 0, 1, "A", display.ColorWhite, 0, scratch); err != nil {
+			panic(err)
+		}
+	}); allocations != 0 {
+		t.Fatalf("MGZ cache-hit draw allocations=%v", allocations)
 	}
-	if _, ok := source.Lookup('A'); ok {
-		t.Fatal("broken DEFLATE unexpectedly passed normal Lookup")
+	if allocations := testing.AllocsPerRun(100, func() {
+		if _, err := text.DrawString(backend, stack.impl, 0, 1, "A", display.ColorWhite, 0, scratch); err != nil {
+			panic(err)
+		}
+	}); allocations != 0 {
+		t.Fatalf("FontStack MGZ cache-hit draw allocations=%v", allocations)
 	}
 }
 

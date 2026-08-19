@@ -46,20 +46,63 @@ type MetadataFont interface {
 	LookupMetadata(r rune) (GlyphMetadata, bool)
 }
 
-// LookupMetadata uses a font's metadata-only path when available and otherwise
-// falls back to Lookup.
-func LookupMetadata(font Font, r rune) (GlyphMetadata, bool) {
+// ResolvedGlyph identifies the leaf font selected for a glyph. It is a
+// transient drawing value and is not retained by fonts or layouts.
+type ResolvedGlyph struct {
+	metadata GlyphMetadata
+	leaf     Font
+	glyph    Glyph
+	hasGlyph bool
+}
+
+// Metadata returns the resolved placement information.
+func (resolved ResolvedGlyph) Metadata() GlyphMetadata { return resolved.metadata }
+
+func (resolved ResolvedGlyph) load(r rune) (Glyph, bool) {
+	if resolved.hasGlyph {
+		return resolved.glyph, true
+	}
+	if resolved.leaf == nil {
+		return Glyph{}, false
+	}
+	return resolved.leaf.Lookup(r)
+}
+
+type glyphResolver interface {
+	ResolveGlyph(r rune) (ResolvedGlyph, bool)
+}
+
+// ResolveGlyph selects one leaf font and preserves a Glyph already loaded
+// while falling back from metadata lookup.
+func ResolveGlyph(font Font, r rune) (ResolvedGlyph, bool) {
 	if font == nil {
-		return GlyphMetadata{}, false
+		return ResolvedGlyph{}, false
+	}
+	if resolver, ok := font.(glyphResolver); ok {
+		return resolver.ResolveGlyph(r)
 	}
 	if metadataFont, ok := font.(MetadataFont); ok {
-		return metadataFont.LookupMetadata(r)
+		metadata, ok := metadataFont.LookupMetadata(r)
+		if !ok {
+			return ResolvedGlyph{}, false
+		}
+		return ResolvedGlyph{metadata: metadata, leaf: font}, true
 	}
 	glyph, ok := font.Lookup(r)
 	if !ok {
+		return ResolvedGlyph{}, false
+	}
+	return ResolvedGlyph{metadata: metadataFromGlyph(glyph), leaf: font, glyph: glyph, hasGlyph: true}, true
+}
+
+// LookupMetadata uses a font's metadata-only path when available and otherwise
+// falls back to Lookup.
+func LookupMetadata(font Font, r rune) (GlyphMetadata, bool) {
+	resolved, ok := ResolveGlyph(font, r)
+	if !ok {
 		return GlyphMetadata{}, false
 	}
-	return metadataFromGlyph(glyph), true
+	return resolved.metadata, true
 }
 
 func metadataFromGlyph(glyph Glyph) GlyphMetadata {
@@ -95,19 +138,26 @@ func (stack FontStack) Lookup(r rune) (Glyph, bool) {
 
 // LookupMetadata searches Primary followed by Fallbacks in array order.
 func (stack FontStack) LookupMetadata(r rune) (GlyphMetadata, bool) {
+	resolved, ok := stack.ResolveGlyph(r)
+	return resolved.metadata, ok
+}
+
+// ResolveGlyph searches Primary followed by Fallbacks and preserves the leaf
+// font chosen by the first successful metadata resolution.
+func (stack FontStack) ResolveGlyph(r rune) (ResolvedGlyph, bool) {
 	if stack.Primary != nil {
-		if glyph, ok := LookupMetadata(stack.Primary, r); ok {
+		if glyph, ok := ResolveGlyph(stack.Primary, r); ok {
 			return glyph, true
 		}
 	}
 	for index := range stack.Fallbacks {
 		if stack.Fallbacks[index] != nil {
-			if glyph, ok := LookupMetadata(stack.Fallbacks[index], r); ok {
+			if glyph, ok := ResolveGlyph(stack.Fallbacks[index], r); ok {
 				return glyph, true
 			}
 		}
 	}
-	return GlyphMetadata{}, false
+	return ResolvedGlyph{}, false
 }
 
 // Metrics returns the component-wise maximum line metrics.

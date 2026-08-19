@@ -43,11 +43,15 @@ func drawStyledFontValue(backend display.Backend, face Font, penX, baselineY int
 	currentX := penX
 	backendWidth, backendHeight := backend.Size()
 	for _, r := range value {
-		position, err := positionGlyph(face, r, currentX, baselineY)
+		resolved, ok := ResolveGlyph(face, r)
+		if !ok {
+			return currentX, fmt.Errorf("text: glyph U+%04X is missing or invalid", r)
+		}
+		metadata := resolved.Metadata()
+		position, err := positionGlyphMetadata(metadata, r, currentX, baselineY)
 		if err != nil {
 			return currentX, err
 		}
-		metadata := position.glyph
 		width, height := int(metadata.Width), int(metadata.Height)
 		if width != 0 && height != 0 {
 			drawWidth := width
@@ -65,8 +69,15 @@ func drawStyledFontValue(backend display.Backend, face Font, penX, baselineY int
 				currentX = position.nextX
 				continue
 			}
-			glyph, ok := face.Lookup(r)
+			glyph, ok := resolved.load(r)
 			if !ok {
+				return currentX, fmt.Errorf("text: glyph U+%04X is missing or invalid", r)
+			}
+			if metadataFromGlyph(glyph) != metadata || glyph.Width < 0 || glyph.Height < 0 {
+				return currentX, fmt.Errorf("text: glyph U+%04X is missing or invalid", r)
+			}
+			requiredBitmap := ((int64(glyph.Width) + 7) / 8) * int64(glyph.Height)
+			if int64(len(glyph.Bitmap)) < requiredBitmap {
 				return currentX, fmt.Errorf("text: glyph U+%04X is missing or invalid", r)
 			}
 			rowPixelBytes := drawWidth * 2
