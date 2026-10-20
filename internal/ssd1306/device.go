@@ -149,6 +149,12 @@ func (d *Device) EndRect() error {
 }
 
 func (d *Device) flush() error {
+	// Set the full column/page address window before every transfer. This
+	// avoids depending on the controller's address pointer after prior writes.
+	window := [...]byte{0x00, 0x21, 0x00, 0x7f, 0x22, 0x00, 0x07}
+	if err := d.bus.Tx(Address, window[:], nil); err != nil {
+		return fmt.Errorf("ssd1306: set address window: %w", err)
+	}
 	if err := d.bus.Tx(Address, d.frame[:], nil); err != nil {
 		return fmt.Errorf("ssd1306: flush: %w", err)
 	}
