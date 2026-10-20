@@ -2,6 +2,7 @@ package mgz
 
 import (
 	"bytes"
+	"io"
 	"compress/flate"
 	"encoding/binary"
 	"strings"
@@ -257,6 +258,34 @@ func TestCacheLRUEviction(t *testing.T) {
 	_, _ = f.Lookup('B')
 	if f.inflations != 6 {
 		t.Fatalf("inflations after evicted lookup=%d, want 6", f.inflations)
+	}
+}
+
+// The same decompressor must survive repeated misses in more distinct
+// blocks than the LRU cache can hold. TinyGo's small MCU heap cannot afford
+// a fresh DEFLATE decoder for every requested glyph.
+func TestInflaterReusedAcrossDistinctBlocks(t *testing.T) {
+	f := MustOpen(makeBlockFont(t, 7))
+	if f.inflater != nil {
+		t.Fatal("Open eagerly allocated an inflater")
+	}
+	var first io.ReadCloser
+	for i := 0; i < 7; i++ {
+		g, ok := f.Lookup(rune('A' + i))
+		if !ok || g.Bitmap != strings.Repeat(string(rune('a'+i)), 16) {
+			t.Fatalf("glyph %d: %+v, ok=%v", i, g, ok)
+		}
+		if i == 0 {
+			first = f.inflater
+			if first == nil {
+				t.Fatal("first compressed Lookup did not allocate a decoder")
+			}
+		} else if f.inflater != first {
+			t.Fatalf("Lookup %d allocated a new DEFLATE decoder", i)
+		}
+	}
+	if f.inflations != 7 {
+		t.Fatalf("inflations = %d, want 7", f.inflations)
 	}
 }
 

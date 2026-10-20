@@ -64,6 +64,10 @@ type Font struct {
 	cache                  [cacheSlots]cacheEntry
 	cacheLen               uint8
 	inflations             uint64
+	// Keep one DEFLATE reader across blocks: creating one for every glyph
+	// can exhaust small microcontroller heaps (the decoder has a 32 KiB
+	// sliding window in addition to per-block decompressed bitmap data).
+	inflater io.ReadCloser
 }
 
 func u16(s string, p int) uint16 { return uint16(s[p]) | uint16(s[p+1])<<8 }
@@ -174,7 +178,25 @@ func (f *Font) validateBlock(index uint32) error {
 // inflate reads a raw DEFLATE stream using only a small fixed copy buffer.
 // When output is nil it validates without retaining the expanded bytes.
 func inflate(stored string, rawLen uint32, output *strings.Builder) error {
-	r := flate.NewReader(strings.NewReader(stored))
+	return inflateReader(flate.NewReader(strings.NewReader(stored)), rawLen, output)
+}
+
+// inflateCached reuses one DEFLATE decoder per font instead of creating a
+// 32 KiB sliding dictionary and Huffman workspace for every cache miss.
+// Font.Lookup is already not safe for concurrent calls.
+func (f *Font) inflateCached(stored string, rawLen uint32, output *strings.Builder) error {
+	input := strings.NewReader(stored)
+	if f.inflater == nil {
+		f.inflater = flate.NewReader(input)
+	} else {
+		if err := f.inflater.(flate.Resetter).Reset(input, nil); err != nil {
+			return err
+		}
+	}
+	return inflateReader(f.inflater, rawLen, output)
+}
+
+func inflateReader(r io.ReadCloser, rawLen uint32, output *strings.Builder) error {
 	var buffer [256]byte
 	var total uint32
 	for {
@@ -291,7 +313,7 @@ func (f *Font) expand(index uint32, cache bool) (string, error) {
 	if b.flags == blockDeflated {
 		var output strings.Builder
 		output.Grow(int(b.rawLen))
-		if err := inflate(stored, b.rawLen, &output); err != nil {
+		if err := f.inflateCached(stored, b.rawLen, &output); err != nil {
 			return "", fmt.Errorf("mgz: inflate block %d: %w", index, err)
 		}
 		raw = output.String()
