@@ -28,8 +28,9 @@ func configured(t *testing.T) (*Device, *testBus) {
 	if err := d.Configure(); err != nil {
 		t.Fatal(err)
 	}
-	if len(bus.writes) != 2 || bus.writes[0][0] != 0x00 ||
-		len(bus.writes[1]) != 1+frameBytes || bus.writes[1][0] != 0x40 {
+	if len(bus.writes) != 3 || bus.writes[0][0] != 0x00 ||
+		len(bus.writes[1]) != 7 || bus.writes[1][1] != 0x21 ||
+		len(bus.writes[2]) != 1+frameBytes || bus.writes[2][0] != 0x40 {
 		t.Fatalf("unexpected initialization writes: %d", len(bus.writes))
 	}
 	return d, bus
@@ -60,8 +61,8 @@ func TestRectStreamsRowsAndSplitPixels(t *testing.T) {
 	if err := d.EndRect(); err != nil {
 		t.Fatal(err)
 	}
-	if len(bus.writes) != 3 {
-		t.Fatalf("writes = %d, want 3", len(bus.writes))
+	if len(bus.writes) != 5 {
+		t.Fatalf("writes = %d, want 5", len(bus.writes))
 	}
 	for _, tc := range []struct {
 		x, y int
@@ -167,7 +168,7 @@ func TestI2CErrors(t *testing.T) {
 	}
 
 	d, b = configured(t)
-	b.failAt = 3
+	b.failAt = 5
 	if err := d.BeginRect(0, 0, 1, 1); err != nil {
 		t.Fatal(err)
 	}
