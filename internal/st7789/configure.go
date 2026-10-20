@@ -1,3 +1,5 @@
+//go:build tinygo
+
 // Initialization and rotation handling are derived from
 // tinygo.org/x/drivers/st7789.
 // Copyright The TinyGo Authors. All rights reserved.
