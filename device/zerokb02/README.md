@@ -17,4 +17,4 @@ The implementation deliberately covers **only the display**. Zero-KB02's
 key matrix, joystick, rotary encoder, LEDs and USB HID are separate
 features, not implemented by this package.
 
-See [the Traditional Chinese greeting example](../../examples/zerokb02-traditional/).
+See [the Traditional Chinese greeting example](https://github.com/rdon-key/modgadget-examples/tree/feat/zerokb02-traditional-demo/zerokb02-traditional) in the separate `modgadget-examples` repository. Once its PR is merged, the example will be available from that repository's `main` branch.
