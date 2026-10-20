@@ -1,3 +1,5 @@
+//go:build tinygo
+
 package st7789
 
 // ST7789 commands used by the minimal initialization and streaming paths.
